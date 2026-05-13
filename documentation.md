@@ -1,12 +1,65 @@
 # Omni Swim Matrix - Documentation and Changelog
 
 ## 📋 Overview
-Omni Swim Matrix is a comprehensive swimming recruitment and team performance matrix tool designed to seamlessly manage swim times, project future drop rates, and simulate meet scoring outcomes based on uploaded athlete meet results. 
+Omni Swim Matrix is a comprehensive swimming recruitment and team performance matrix tool designed to seamlessly manage swim times, project future drop rates, and simulate meet scoring outcomes based on uploaded athlete meet results.
 
-Built with React, Vite, and tailwind css for styling alongside an Express Python-powered backend (invoking a `pdf_parser.py` using `pdfplumber`), this application serves as the ultimate dashboard for swim coaches to visualize their entire team's trajectory and potential.
+Built with React, Vite, and Tailwind CSS for styling alongside an Express/Python backend (invoking `pdf_parser.py` with `pdfplumber`), this application serves as a dashboard for swim coaches to visualize their team's trajectory and potential.
 
 ---
 
+## 🛠️ Tools & Technologies
+
+### Frontend Stack
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **React** | 19.0.1 | Component-based UI framework |
+| **TypeScript** | ~5.8.2 | Type-safe JavaScript |
+| **Vite** | 6.2.3 | Fast bundler and dev server |
+| **Tailwind CSS** | 4.1.14 | Utility-first CSS framework |
+| **Recharts** | 3.8.1 | React charting library for visualizations |
+| **Motion** | 12.23.24 | Animation and transitions library |
+| **Lucide React** | 0.546.0 | Icon library |
+| **React DOM** | 19.0.1 | DOM rendering for React |
+
+### Backend Stack
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **Express.js** | 4.21.2 | HTTP server and REST API |
+| **Node.js** | 22.14.0+ | JavaScript runtime environment |
+| **TypeScript** | ~5.8.2 | Type-safe backend code |
+| **Python** | 3.x | PDF parsing and data processing |
+| **pdfplumber** | Latest | PDF text extraction and analysis |
+
+### Development & AI Assistance Tools
+| Tool | Purpose |
+|------|---------|
+| **GitHub Copilot** | AI-powered code generation and completion in VS Code |
+| **Gemini Pro 1.5 Preview** | Research, architectural decisions, and optimization guidance via Google AI Studio |
+| **DeepSeek V4** | Complex problem-solving, debugging, and algorithmic assistance |
+| **VS Code** | Primary IDE with TypeScript and Python support |
+
+### Build & Development Tools
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **npm** | Latest | Package management and task runner |
+| **tsx** | 4.21.0 | TypeScript execution for Node scripts |
+| **Autoprefixer** | 10.4.21 | CSS vendor prefixes |
+| **JIMP** | 1.6.1 | Image processing (background removal, logo generation) |
+
+### Utilities & Libraries
+| Library | Version | Purpose |
+|---------|---------|---------|
+| **UUID** | 14.0.0 | Unique ID generation for workspaces/athletes |
+| **Lodash** | 4.18.1 | Utility functions for data manipulation |
+| **Dotenv** | 17.2.3 | Environment variable management |
+| **pdf-parse** | 2.4.5 | PDF parsing utilities |
+
+### Data Storage
+| Format | Purpose |
+|--------|---------|
+| **JSON** | Persistent storage via `meets.json` for all workspace and result data |
+
+---
 ## 🚀 Features
 
 ### 1. **PDF Parsing and Data Extraction**
