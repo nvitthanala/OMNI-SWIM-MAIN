@@ -1,8 +1,14 @@
 # OMNI-SWIM: Matrix Suite
 
+<div align="center">
+  <img src="public/logo.png" alt="OMNI-SWIM Logo - Swimming Analytics" width="200" />
+</div>
+
 Professional analytics for competitive swimming. Parse results, track team standings, and simulate recruit impacts.
 
-## �️ Tech Stack
+---
+
+## Tools & Tech Stack
 
 ### Frontend
 - **React 19** – UI framework
@@ -24,7 +30,7 @@ Professional analytics for competitive swimming. Parse results, track team stand
 - **GitHub Copilot** – Code generation and completion
 - **Gemini Pro 1.5 Preview** (via Google AI Studio) – Research and architectural guidance
 - **DeepSeek V4** – Problem-solving and debugging
-- **VS Code** – IDE with TypeScript language support
+- **VS Code** – IDE with TypeScript and Python support
 
 ### Utilities & Libraries
 - **UUID** – Unique ID generation
@@ -34,23 +40,69 @@ Professional analytics for competitive swimming. Parse results, track team stand
 - **pdf-parse** – PDF parsing utilities
 - **Autoprefixer** – CSS vendor prefixes
 
-## �🚀 Easy Start
-1. Install dependencies:
-   - `npm install`
-   - `pip install pdfplumber`
-2. Start the app:
+---
+
+## Getting Started
+
+1. **Install dependencies:**
+   ```bash
+   npm install
+   pip install pdfplumber
+   ```
+
+2. **Start the app:**
    - Windows: `start.bat`
    - macOS/Linux: `start.sh`
-   - Or run `npm run dev` directly.
-3. Open `http://localhost:3000` in your browser.
+   - Or run: `npm run dev`
 
-## 🛠️ Troubleshooting
-1. **Node.js Missing**: Install Node.js from https://nodejs.org/
-2. **Python Missing**: Install Python from https://www.python.org/downloads/ and ensure it is on your `PATH`.
-3. **Python Dependency**: `start.bat` installs `pdfplumber` automatically if needed.
+3. **Open in browser:**
+   - Navigate to `http://localhost:3000`
 
-## 📁 Features
-- **PDF Ingestion**: Upload Hy-Tek meet results to populate the matrix.
-- **Recruit Simulation**: Inject new swimmers to see how they impact team scores.
-- **Auto-Save**: All data is saved to `meets.json`. You can share this file with others to sync your data.
-- **Safe Export**: Download your results as a CSV at any time from the sidebar.
+---
+
+## Troubleshooting
+
+- **Node.js Missing**: Install from https://nodejs.org/
+- **Python Missing**: Install from https://www.python.org/downloads/ and add to PATH
+- **Python Dependency**: `start.bat` installs `pdfplumber` automatically if needed
+
+---
+
+## Features
+
+- **PDF Ingestion**: Upload Hy-Tek meet results to populate the matrix
+- **Recruit Simulation**: Inject new swimmers to see how they impact team scores
+- **Auto-Save**: All data is saved to `meets.json` for easy sharing
+- **Safe Export**: Download your results as CSV at any time from the sidebar
+
+---
+
+## Development
+
+```bash
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Type checking
+npm run lint
+```
+
+---
+
+## Project Structure
+
+- `src/` – React frontend components and logic
+- `public/` – Static assets (logo, images)
+- `server.ts` – Express backend and API routes
+- `pdf_parser.py` – PDF text extraction and parsing
+- `point_calculator.py` – Meet scoring engine
+- `meets.json` – Data storage file
+
+---
+
+## License
+
+Apache-2.0
