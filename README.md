@@ -33,6 +33,8 @@ Professional analytics for competitive swimming. Parse results, track team stand
 - **Gemma 9B e4b** – Experimental code assistance and rapid prototyping
 - **Gemma 4-26b-a4b** – Advanced synthesis and design guidance
 - **DeepSeek V4** – Problem-solving and debugging
+- **cline** – Command Line Interface utility for streamlined development tasks
+- **roocode** – Specialized tool for generating and optimizing code snippets
 - **VS Code** – IDE with TypeScript and Python support
 
 ### Utilities & Libraries

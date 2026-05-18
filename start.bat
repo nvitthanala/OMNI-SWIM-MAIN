@@ -17,11 +17,17 @@ python --version >nul 2>&1
 if errorlevel 1 goto missing_python
 echo [OK] Python is installed.
 
-python -c "import pdfplumber" >nul 2>&1
-if errorlevel 1 (
-    echo [!] Installing Python dependencies...
-    call pip install pdfplumber
+if not exist "venv\" (
+    echo [!] Creating Python virtual environment...
+    python -m venv venv
 )
+echo [OK] Virtual environment ready.
+
+echo ===================================================
+echo [!] CLEANING UP STALE SERVER PROCESSES...
+echo ===================================================
+taskkill /F /IM node.exe >nul 2>&1
+timeout /t 2 /nobreak >nul
 
 echo ===================================================
 echo [!] STARTING OMNI SWIM APP...
@@ -29,7 +35,7 @@ echo [!] A browser tab will open automatically.
 echo [!] KEEP THIS WINDOW OPEN to maintain the server.
 echo ===================================================
 
-start "" cmd /c "ping 127.0.0.1 -n 4 > nul & start http://localhost:3000"
+start "" cmd /c "timeout /t 5 /nobreak > nul & start http://localhost:3000"
 cmd /k npm run dev
 pause
 exit /b
