@@ -29,6 +29,8 @@ Professional analytics for competitive swimming. Parse results, track team stand
 ### Development & AI Assistance
 - **GitHub Copilot** – Code generation and completion
 - **Gemini Pro 1.5 Preview** (via Google AI Studio) – Research and architectural guidance
+- **Gemma 9B e4b** – Experimental code assistance and rapid prototyping
+- **Gemma 4-26b-a4b** – Advanced synthesis and design guidance
 - **DeepSeek V4** – Problem-solving and debugging
 - **VS Code** – IDE with TypeScript and Python support
 
