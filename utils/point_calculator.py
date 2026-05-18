@@ -216,24 +216,24 @@ def calculate_points(athletes, scoring_settings=None):
                 ath = group[0]
                 is_exhibition = ath.get('is_exhibition', False)
                 is_time_trial = ath.get('is_time_trial', False) or 'TIME TRIAL' in ath.get('event', '').upper()
-        # Conference-aware scoring rounds: A/B Finals are always scored. Prelims score if they have > 1 unique scorer AND the event is NOT a pure time trial (like 50 Free).
-        conf = ath.get('conference')
-        allowed = allowed_rounds_for_conference(conf)
-        round_swam_up = ath.get('round_swam', '').upper()
-        ev_name = ath.get('event','').upper()
-        is_distance = bool(re.search(r'\b(1000|1650|1500|10000|800)\b', ev_name)) or 'TIMED' in ev_name
-        
-        # Scoring rule: If the event is a distance/timed race, and it has more than 2 unique scorers (implies a full meet), we score Prelims. Otherwise, we rely on A/B finals scoring rules.
-        if is_distance and round_swam_up == 'PRELIMINARIES' and len(set([a['round_swam'] for a in ev_athletes if not a['is_exhibition']])) > 1:
-            is_scoring_round = True # Force scoring for prelims in distance events
-        elif any(r in round_swam_up for r in allowed):
-            is_scoring_round = True
-        else:
-            is_scoring_round = False
+                # Conference-aware scoring rounds: A/B Finals are always scored. Prelims score if they have > 1 unique scorer AND the event is NOT a pure time trial (like 50 Free).
+                conf = ath.get('conference')
+                allowed = allowed_rounds_for_conference(conf)
+                round_swam_up = ath.get('round_swam', '').upper()
+                ev_name = ath.get('event','').upper()
+                is_distance = bool(re.search(r'\b(1000|1650|1500|10000|800)\b', ev_name)) or 'TIMED' in ev_name
+                
+                # Scoring rule: If the event is a distance/timed race, and it has more than 2 unique scorers (implies a full meet), we score Prelims. Otherwise, we rely on A/B finals scoring rules.
+                if is_distance and round_swam_up == 'PRELIMINARIES' and len(set([a['round_swam'] for a in ev_athletes if not a['is_exhibition']])) > 1:
+                    is_scoring_round = True # Force scoring for prelims in distance events
+                elif any(r in round_swam_up for r in allowed):
+                    is_scoring_round = True
+                else:
+                    is_scoring_round = False
 
-        can_score = not is_exhibition and not is_time_trial and is_scoring_round
+                can_score = not is_exhibition and not is_time_trial and is_scoring_round
 
-        if can_score and scored_count < len(SCORING):
+                if can_score and scored_count < len(SCORING):
                     grp_len = len(group)
                     start = scored_count
                     end = min(scored_count + grp_len, len(SCORING))
@@ -251,7 +251,8 @@ def calculate_points(athletes, scoring_settings=None):
                             team_individual_count[team_name] += 1
                         all_calculated_athletes[f"{event}_{gender}_{member['name']}"] = member
                     scored_count += grp_len
-        else:
+                    i = j
+                else:
                     for member in group:
                         member['calculated_points'] = 'N/A'
                         all_calculated_athletes[f"{event}_{gender}_{member['name']}"] = member

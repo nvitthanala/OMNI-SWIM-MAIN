@@ -48,8 +48,10 @@ async function runPythonScript(scriptPath: string, args: string[], stdin?: strin
     proc.on('close', (code) => {
       if (!resolved) {
         resolved = true;
+        // Include partial stdout/stderr in error message even on non-zero exit
+        const errMsg = errorOutput || output.substring(0, 500);
         if (code !== 0) {
-          reject(new Error(`Python script failed with code ${code}\nError: ${errorOutput}`));
+          reject(new Error(`Python script failed with code ${code}\nError: ${errMsg}`));
         } else {
           resolve(output);
         }
@@ -57,15 +59,30 @@ async function runPythonScript(scriptPath: string, args: string[], stdin?: strin
     });
 
     if (stdin) {
-      try {
-        proc.stdin.write(stdin);
-        proc.stdin.end();
-      } catch (err) {
-        if (!resolved) {
-          resolved = true;
-          reject(new Error(`Failed to write to Python stdin: ${err}`));
+      // Write stdin with proper backpressure handling to avoid "write EOF" errors
+      // on large payloads.  This is critical because Node's pipe can overflow if the
+      // Python process isn't ready to consume data immediately.
+      const writeStdin = () => {
+        const canContinue = proc.stdin.write(stdin, 'utf-8', (writeErr) => {
+          if (writeErr) {
+            if (!resolved) {
+              resolved = true;
+              reject(new Error(`Failed to write to Python stdin: ${writeErr.message}`));
+            }
+            return;
+          }
+          // After write completes successfully, end the stream.
+          proc.stdin.end();
+        });
+        if (!canContinue) {
+          // If the internal buffer is full, wait for drain event before ending.
+          proc.stdin.once('drain', () => {
+            proc.stdin.end();
+          });
         }
-      }
+      };
+      // Use setImmediate to ensure the process event loop is ready before writing
+      setImmediate(writeStdin);
     }
   });
 }
@@ -221,7 +238,7 @@ async function startServer() {
       // Run point calculator
       let calcOutput;
       try {
-        calcOutput = await runPythonScript('point_calculator.py', [], parserOutput);
+        calcOutput = await runPythonScript(path.join('utils', 'point_calculator.py'), [], parserOutput);
       } catch (err) {
         responseSent = true;
         return res.status(500).json({ error: 'Points calculation failed', details: String(err) });

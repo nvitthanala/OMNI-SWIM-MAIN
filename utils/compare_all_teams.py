@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import sys, json, subprocess, re
+import sys, json, subprocess, re, os
 from collections import defaultdict
 import pdfplumber
 
@@ -8,8 +8,14 @@ if len(sys.argv) < 2:
     sys.exit(1)
 pdf=sys.argv[1]
 # parse pdf
-proc = subprocess.run([sys.executable,'pdf_parser.py',pdf], capture_output=True, text=True)
+proc = subprocess.run([sys.executable, 'pdf_parser.py', pdf], capture_output=True, text=True)
 parsed=json.loads(proc.stdout)
+# Ensure point_calculator can be imported whether run from root or from utils/
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir:
+    sys.path.insert(0, script_dir)
+    sys.path.insert(0, os.path.dirname(script_dir))
+sys.path.insert(0, os.getcwd())
 from point_calculator import calculate_points
 scored = calculate_points(parsed)
 # compute our totals per team per gender (use team-level relay points once)
