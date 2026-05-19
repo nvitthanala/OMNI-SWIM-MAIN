@@ -269,7 +269,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
   };
 
   return (
-    <div className={`neon-card rounded-md overflow-hidden mb-4`} style={{ borderLeftColor: team.color }}>
+    <div className={`neon-card rounded-md overflow-hidden mb-4`} style={{ borderLeftColor: team.color || '#F43F5E' }}>
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between p-5 hover:bg-white/2 transition-colors"
@@ -388,19 +388,15 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} width={30} />
-                        <Tooltip
-                          wrapperStyle={{ visibility: 'hidden', pointerEvents: 'none' }}
-                          content={() => null}
-                          cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 }}
-                        />
+                        <Tooltip content={() => null} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 }} />
                         <Line
                           type="monotone"
                           dataKey="points"
-                          stroke={team.color}
+                          stroke={team.color || '#F43F5E'}
                           strokeWidth={2}
                           dot={false}
                           isAnimationActive={false}
-                          activeDot={{ r: 5, fill: team.color, stroke: '#fff', strokeWidth: 1 }}
+                          activeDot={{ r: 5, fill: team.color || '#F43F5E', stroke: '#fff', strokeWidth: 1 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>

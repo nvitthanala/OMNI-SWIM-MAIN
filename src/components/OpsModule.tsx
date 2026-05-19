@@ -13,6 +13,55 @@ import TeamCard from './TeamCard';
 import RecruitForm from './RecruitForm';
 import ScoringSettingsPanel from './ScoringSettingsPanel';
 
+type TimelineTooltipContentProps = {
+  active?: boolean;
+  payload?: any[];
+  label?: string;
+  teamsWithLineStyles: TeamScore[];
+};
+
+function TimelineTooltipContent({ active, payload, label, teamsWithLineStyles }: TimelineTooltipContentProps) {
+  if (!active || !payload?.length) return null;
+  const dashByTeam = Object.fromEntries(teamsWithLineStyles.map(t => [t.teamName, t.strokeDasharray]));
+  const rows = payload
+    .map((p: any) => ({
+      name: (p.name ?? p.dataKey) as string,
+      value: typeof p.value === 'number' ? p.value : Number(p.value),
+      color: p.color as string,
+      strokeDasharray: dashByTeam[(p.name ?? p.dataKey) as string] as string | undefined,
+    }))
+    .filter(r => !Number.isNaN(r.value))
+    .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+  return (
+    <div className="bg-[#0c0f16] border border-gray-700 rounded-lg p-2.5 shadow-xl max-w-xs">
+      <div className="text-rose-400 font-bold mb-2 text-[10px] uppercase tracking-wide border-b border-gray-800 pb-1">
+        {label}
+      </div>
+      <ul className="space-y-1 font-mono text-[10px]">
+        {rows.map(r => (
+          <li key={r.name} className="flex items-center justify-between gap-4 text-gray-200">
+            <span className="flex items-center gap-2 min-w-0">
+              <svg width="22" height="8" className="shrink-0" aria-hidden>
+                <line
+                  x1="0"
+                  y1="4"
+                  x2="22"
+                  y2="4"
+                  stroke={r.color}
+                  strokeWidth="2"
+                  strokeDasharray={r.strokeDasharray}
+                />
+              </svg>
+              <span className="truncate">{r.name}</span>
+            </span>
+            <span className="text-emerald-400 font-bold shrink-0">{r.value.toFixed(1)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 interface Props {
   workspace: Workspace;
   gender: Gender;
@@ -27,8 +76,10 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const [pdfFormat, setPdfFormat] = useState('auto');
 
   // Filter results and recruits by gender
-  const currentResults = gender === Gender.MEN ? workspace.menResults : workspace.womenResults;
-  const currentRecruits = workspace.recruits.filter(r => r.gender === gender);
+  const menResults = workspace.menResults ?? [];
+  const womenResults = workspace.womenResults ?? [];
+  const currentResults = gender === Gender.MEN ? menResults : womenResults;
+  const currentRecruits = (workspace.recruits ?? []).filter(r => r.gender === gender);
 
   // Transform recruits into results for scoring
   const recruitResults: SwimmerResult[] = currentRecruits.map(r => ({
@@ -58,19 +109,20 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     const scored = calculatePoints(eventResults, workspace.scoringSettings);
     
     scored.forEach(res => {
-      if (!teamsMap[res.team]) {
-        teamsMap[res.team] = {
-          teamName: res.team,
+      const teamKey = String(res.team ?? 'Unknown').trim() || 'Unknown';
+      if (!teamsMap[teamKey]) {
+        teamsMap[teamKey] = {
+          teamName: teamKey,
           totalPoints: 0,
           swimmers: [],
-          color: getTeamColors(res.team).primary,
+          color: getTeamColors(teamKey).primary,
         };
-        runningTotals[res.team] = 0;
+        runningTotals[teamKey] = 0;
       }
       const pts = typeof res.points === 'number' ? res.points : 0;
-      teamsMap[res.team].totalPoints += pts;
-      teamsMap[res.team].swimmers.push(res);
-      runningTotals[res.team] += pts;
+      teamsMap[teamKey].totalPoints += pts;
+      teamsMap[teamKey].swimmers.push(res);
+      runningTotals[teamKey] += pts;
     });
 
     if (!isTimeTrial) {
@@ -92,51 +144,9 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const teamStyleSignature = sortedTeams.map(t => `${t.teamName}:${t.totalPoints}:${t.color}`).join('|');
   const teamsWithLineStyles = useMemo(() => assignTeamLineStyles(sortedTeams), [teamStyleSignature]);
 
-  function TimelineTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
-    if (!active || !payload?.length) return null;
-    const dashByTeam = Object.fromEntries(teamsWithLineStyles.map(t => [t.teamName, t.strokeDasharray]));
-    const rows = payload
-      .map((p: any) => ({
-        name: (p.name ?? p.dataKey) as string,
-        value: typeof p.value === 'number' ? p.value : Number(p.value),
-        color: p.color as string,
-        strokeDasharray: dashByTeam[(p.name ?? p.dataKey) as string] as string | undefined,
-      }))
-      .filter(r => !Number.isNaN(r.value))
-      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
-    return (
-      <div className="bg-[#0c0f16] border border-gray-700 rounded-lg p-2.5 shadow-xl max-w-xs">
-        <div className="text-rose-400 font-bold mb-2 text-[10px] uppercase tracking-wide border-b border-gray-800 pb-1">
-          {label}
-        </div>
-        <ul className="space-y-1 font-mono text-[10px]">
-          {rows.map(r => (
-            <li key={r.name} className="flex items-center justify-between gap-4 text-gray-200">
-              <span className="flex items-center gap-2 min-w-0">
-                <svg width="22" height="8" className="shrink-0" aria-hidden>
-                  <line
-                    x1="0"
-                    y1="4"
-                    x2="22"
-                    y2="4"
-                    stroke={r.color}
-                    strokeWidth="2"
-                    strokeDasharray={r.strokeDasharray}
-                  />
-                </svg>
-                <span className="truncate">{r.name}</span>
-              </span>
-              <span className="text-emerald-400 font-bold shrink-0">{r.value.toFixed(1)}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
   const handleAddRecruit = (recruit: Recruit) => {
     onUpdate({
-      recruits: [...workspace.recruits, recruit]
+      recruits: [...(workspace.recruits ?? []), recruit],
     });
     setIsAddingRecruit(false);
   };
@@ -149,7 +159,16 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     });
     // Deduplicate or just take top points? These are individual swims.
     return combinedResults
-      .filter(r => !searchQuery || r.name.toLowerCase().includes(searchQuery.toLowerCase()) || r.team.toLowerCase().includes(searchQuery.toLowerCase()))
+      .filter(
+        r =>
+          !searchQuery ||
+          String(r.name ?? '')
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase()) ||
+          String(r.team ?? '')
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())
+      )
       .sort((a, b) => {
       const ptsA = typeof a.points === 'number' ? a.points : 0;
       const ptsB = typeof b.points === 'number' ? b.points : 0;
@@ -182,8 +201,8 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
         const parsedWomen = data.results.filter((r: any) => r.gender === 'Women');
         
         onUpdate({ 
-          menResults: [...workspace.menResults, ...parsedMen],
-          womenResults: [...workspace.womenResults, ...parsedWomen]
+          menResults: [...(workspace.menResults ?? []), ...parsedMen],
+          womenResults: [...(workspace.womenResults ?? []), ...parsedWomen]
         });
       } finally {
         setIsParsingPdf(false);
@@ -212,7 +231,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
                 <Tooltip
                   cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
-                  content={<TimelineTooltip />}
+                  content={props => <TimelineTooltipContent {...props} teamsWithLineStyles={teamsWithLineStyles} />}
                 />
                 {teamsWithLineStyles.map(team => (
                   <Line
@@ -328,7 +347,16 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           <div className="space-y-4">
             {teamsWithLineStyles.length > 0 ? (
               teamsWithLineStyles
-                .filter(t => !searchQuery || t.teamName.toLowerCase().includes(searchQuery.toLowerCase()) || Object.values(t.swimmers).some(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())))
+                .filter(
+                  t =>
+                    !searchQuery ||
+                    t.teamName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    Object.values(t.swimmers).some(s =>
+                      String(s.name ?? '')
+                        .toLowerCase()
+                        .includes(searchQuery.toLowerCase())
+                    )
+                )
                 .map((team, index) => (
                 <TeamCard 
                   key={team.teamName} 

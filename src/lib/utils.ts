@@ -11,8 +11,11 @@ type TeamColorJsonEntry = string | { primary: string; secondary?: string };
 
 function parseTeamColorEntry(entry: TeamColorJsonEntry | undefined): { primary: string; secondary?: string } {
   if (!entry) return { primary: '#888888' };
-  if (typeof entry === 'string') return { primary: entry };
-  if (typeof entry === 'object' && entry.primary) return { primary: entry.primary, secondary: entry.secondary };
+  if (typeof entry === 'string') return { primary: entry || '#888888' };
+  if (typeof entry === 'object' && entry !== null && typeof (entry as { primary?: unknown }).primary === 'string') {
+    const o = entry as { primary: string; secondary?: string };
+    return { primary: o.primary || '#888888', secondary: o.secondary };
+  }
   return { primary: '#888888' };
 }
 
@@ -114,11 +117,12 @@ function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: n
 }
 
 /** Distinct secondary for charts on dark UI; stable per team name. */
-export function synthesizeSecondaryColor(primary: string, salt: string): string {
+export function synthesizeSecondaryColor(primary: string, salt: string | null | undefined): string {
   const rgb = hexToRgb(primary);
   if (!rgb) return '#00F5FF';
   const { h, s, l } = rgbToHsl(rgb.r, rgb.g, rgb.b);
-  const hash = Array.from(salt.toLowerCase()).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const sSafe = String(salt ?? 'x');
+  const hash = Array.from(sSafe.toLowerCase()).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   const h2 = (h + 38 + (hash % 180)) % 360;
   const s2 = Math.min(0.95, s + 0.15);
   const l2 = Math.min(0.82, Math.max(0.35, l + (hash % 2 === 0 ? 0.18 : -0.1)));
@@ -143,9 +147,10 @@ function getNormalizedColorMap(): Record<string, TeamColorJsonEntry> {
   return cachedColorMap;
 }
 
-export function getTeamColors(teamName: string): { primary: string; secondary: string } {
+export function getTeamColors(teamName: string | null | undefined): { primary: string; secondary: string } {
+  const safeName = String(teamName ?? 'Unknown').trim() || 'Unknown';
   const normalizedMap = getNormalizedColorMap();
-  const searchName = teamName.toLowerCase();
+  const searchName = safeName.toLowerCase();
 
   let entry: TeamColorJsonEntry | undefined = normalizedMap[searchName];
   if (!entry) {
@@ -162,7 +167,7 @@ export function getTeamColors(teamName: string): { primary: string; secondary: s
     primary = parsed.primary;
     secondaryFromJson = parsed.secondary;
   } else {
-    const hash = Array.from(teamName).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hash = Array.from(safeName).reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const colors = ['#00F5FF', '#FF00FF', '#39FF14', '#FFD700', '#FF4444', '#8A2BE2', '#FF8C00'];
     primary = colors[hash % colors.length];
   }
@@ -177,7 +182,7 @@ export function getTeamColors(teamName: string): { primary: string; secondary: s
     }
   }
 
-  const secondary = secondaryFromJson || synthesizeSecondaryColor(primary, teamName);
+  const secondary = secondaryFromJson || synthesizeSecondaryColor(primary, safeName);
   return { primary, secondary };
 }
 
@@ -366,7 +371,7 @@ export function getYearsRemaining(year: ClassYear): number {
 }
 
 /** @deprecated Prefer getTeamColors; kept for call sites that only need a single stroke. */
-export function getTeamColor(teamName: string, _index: number): string {
+export function getTeamColor(teamName: string | null | undefined, _index: number): string {
   return getTeamColors(teamName).primary;
 }
 
@@ -389,11 +394,13 @@ export function assignTeamLineStyles(teams: TeamScore[]): TeamScore[] {
     if (ra !== rb) parent[rb] = ra;
   }
 
+  const safeHex = (c: string | undefined) => String(c || '#888888');
+
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const ci = teams[i].color.toUpperCase();
-      const cj = teams[j].color.toUpperCase();
-      if (ci === cj || rgbColorDistance(teams[i].color, teams[j].color) < COLOR_CLOSE_THRESHOLD) {
+      const ci = safeHex(teams[i].color).toUpperCase();
+      const cj = safeHex(teams[j].color).toUpperCase();
+      if (ci === cj || rgbColorDistance(safeHex(teams[i].color), safeHex(teams[j].color)) < COLOR_CLOSE_THRESHOLD) {
         unite(i, j);
       }
     }
@@ -408,7 +415,8 @@ export function assignTeamLineStyles(teams: TeamScore[]): TeamScore[] {
 
   const out: TeamScore[] = teams.map(t => ({
     ...t,
-    lineColor: t.color,
+    color: safeHex(t.color),
+    lineColor: safeHex(t.color),
     strokeDasharray: undefined,
   }));
 
@@ -420,9 +428,11 @@ export function assignTeamLineStyles(teams: TeamScore[]): TeamScore[] {
     if (idxs.length === 2) {
       const [win, lose] = idxs;
       const { secondary } = getTeamColors(teams[lose].teamName);
-      out[win].lineColor = teams[win].color;
+      out[win].lineColor = safeHex(teams[win].color);
       out[lose].lineColor =
-        rgbColorDistance(teams[win].color, secondary) < 22 ? synthesizeSecondaryColor(teams[lose].color, teams[lose].teamName) : secondary;
+        rgbColorDistance(safeHex(teams[win].color), secondary) < 22
+          ? synthesizeSecondaryColor(safeHex(teams[lose].color), teams[lose].teamName)
+          : secondary;
       out[win].strokeDasharray = undefined;
       out[lose].strokeDasharray = undefined;
       continue;
@@ -432,7 +442,7 @@ export function assignTeamLineStyles(teams: TeamScore[]): TeamScore[] {
     idxs.forEach((teamIdx, rank) => {
       const t = teams[teamIdx];
       const { primary: schoolPrimary, secondary } = getTeamColors(t.teamName);
-      const basePrimary = t.color;
+      const basePrimary = safeHex(t.color);
       const baseSecondary =
         rgbColorDistance(basePrimary, secondary) < 18 ? synthesizeSecondaryColor(basePrimary, t.teamName) : secondary;
 
