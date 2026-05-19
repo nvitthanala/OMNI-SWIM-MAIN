@@ -6,9 +6,9 @@
 import React, { useState, useMemo } from 'react';
 import { Trophy, Users, Plus, ChevronDown, TrendingUp, Clock, Briefcase, Search, UserMinus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Gender, Workspace, SwimmerResult, Recruit, ClassYear, TeamScore, ScoringSettings } from '../types';
-import { calculatePoints, convertToSCY, getTeamColor, simulateRoster } from '../lib/utils';
+import { calculatePoints, convertToSCY, getTeamColors, assignTeamLineStyles, simulateRoster } from '../lib/utils';
 import TeamCard from './TeamCard';
 import RecruitForm from './RecruitForm';
 import ScoringSettingsPanel from './ScoringSettingsPanel';
@@ -63,7 +63,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           teamName: res.team,
           totalPoints: 0,
           swimmers: [],
-          color: getTeamColor(res.team, Object.keys(teamsMap).length)
+          color: getTeamColors(res.team).primary,
         };
         runningTotals[res.team] = 0;
       }
@@ -88,6 +88,51 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   });
 
   const sortedTeams = Object.values(teamsMap).sort((a, b) => b.totalPoints - a.totalPoints);
+
+  const teamStyleSignature = sortedTeams.map(t => `${t.teamName}:${t.totalPoints}:${t.color}`).join('|');
+  const teamsWithLineStyles = useMemo(() => assignTeamLineStyles(sortedTeams), [teamStyleSignature]);
+
+  function TimelineTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
+    if (!active || !payload?.length) return null;
+    const dashByTeam = Object.fromEntries(teamsWithLineStyles.map(t => [t.teamName, t.strokeDasharray]));
+    const rows = payload
+      .map((p: any) => ({
+        name: (p.name ?? p.dataKey) as string,
+        value: typeof p.value === 'number' ? p.value : Number(p.value),
+        color: p.color as string,
+        strokeDasharray: dashByTeam[(p.name ?? p.dataKey) as string] as string | undefined,
+      }))
+      .filter(r => !Number.isNaN(r.value))
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+    return (
+      <div className="bg-[#0c0f16] border border-gray-700 rounded-lg p-2.5 shadow-xl max-w-xs">
+        <div className="text-rose-400 font-bold mb-2 text-[10px] uppercase tracking-wide border-b border-gray-800 pb-1">
+          {label}
+        </div>
+        <ul className="space-y-1 font-mono text-[10px]">
+          {rows.map(r => (
+            <li key={r.name} className="flex items-center justify-between gap-4 text-gray-200">
+              <span className="flex items-center gap-2 min-w-0">
+                <svg width="22" height="8" className="shrink-0" aria-hidden>
+                  <line
+                    x1="0"
+                    y1="4"
+                    x2="22"
+                    y2="4"
+                    stroke={r.color}
+                    strokeWidth="2"
+                    strokeDasharray={r.strokeDasharray}
+                  />
+                </svg>
+                <span className="truncate">{r.name}</span>
+              </span>
+              <span className="text-emerald-400 font-bold shrink-0">{r.value.toFixed(1)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
 
   const handleAddRecruit = (recruit: Recruit) => {
     onUpdate({
@@ -165,27 +210,52 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 9, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
-                <Tooltip 
+                <Tooltip
                   cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
-                  contentStyle={{ background: '#0c0f16', border: '1px solid #1f2937', fontSize: '10px', color: '#fff', borderRadius: '8px', padding: '10px' }}
-                  labelStyle={{ color: '#F43F5E', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}
-                  itemStyle={{ color: '#fff', fontSize: '10px', fontWeight: 'medium' }}
+                  content={<TimelineTooltip />}
                 />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
-                {sortedTeams.map(team => (
-                  <Line 
+                {teamsWithLineStyles.map(team => (
+                  <Line
                     key={team.teamName}
-                    type="monotone" 
-                    dataKey={team.teamName} 
+                    type="monotone"
+                    dataKey={team.teamName}
                     name={team.teamName}
-                    stroke={team.color} 
-                    strokeWidth={2} 
+                    stroke={team.lineColor ?? team.color}
+                    strokeWidth={2}
+                    strokeDasharray={team.strokeDasharray}
                     dot={false}
+                    isAnimationActive={false}
                     activeDot={{ r: 4, strokeWidth: 0 }}
                   />
                 ))}
               </LineChart>
             </ResponsiveContainer>
+          </div>
+          <div
+            className="mt-3 flex flex-wrap gap-x-4 gap-y-2 justify-center pointer-events-none select-none border-t border-theme-soft pt-3"
+            aria-hidden
+          >
+            {teamsWithLineStyles.map(t => (
+              <span
+                key={t.teamName}
+                className="inline-flex items-center gap-2 text-[10px] text-theme-secondary font-mono uppercase tracking-tight max-w-[200px]"
+              >
+                <svg width="28" height="10" className="shrink-0 overflow-visible">
+                  <line
+                    x1="0"
+                    y1="5"
+                    x2="28"
+                    y2="5"
+                    stroke={t.lineColor ?? t.color}
+                    strokeWidth="2"
+                    strokeDasharray={t.strokeDasharray}
+                  />
+                </svg>
+                <span className="truncate" title={t.teamName}>
+                  {t.teamName}
+                </span>
+              </span>
+            ))}
           </div>
         </div>
 
@@ -256,8 +326,8 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           </div>
           
           <div className="space-y-4">
-            {sortedTeams.length > 0 ? (
-              sortedTeams
+            {teamsWithLineStyles.length > 0 ? (
+              teamsWithLineStyles
                 .filter(t => !searchQuery || t.teamName.toLowerCase().includes(searchQuery.toLowerCase()) || Object.values(t.swimmers).some(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())))
                 .map((team, index) => (
                 <TeamCard 
@@ -325,7 +395,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           <h3 className="text-sm font-medium text-[var(--text-accent)] uppercase tracking-widest mb-4">Recruit Projection Matrix</h3>
           <RecruitForm 
             gender={gender} 
-            teams={sortedTeams.map(t => t.teamName)} 
+            teams={teamsWithLineStyles.map(t => t.teamName)} 
             onSubmit={handleAddRecruit} 
           />
           

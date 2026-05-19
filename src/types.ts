@@ -40,7 +40,12 @@ export interface TeamScore {
   teamName: string;
   totalPoints: number;
   swimmers: SwimmerResult[];
+  /** School primary (card border, legend swatch). */
   color: string;
+  /** Stroke color for multi-team timeline lines (may differ when disambiguating). */
+  lineColor?: string;
+  /** Recharts dash pattern for timeline when multiple teams share similar colors. */
+  strokeDasharray?: string;
 }
 
 export interface ScoringSettings {

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -38,8 +38,37 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
   // Custom Tooltip State
   const [activeTooltip, setActiveTooltip] = useState<any>(null);
   const [pinnedTooltip, setPinnedTooltip] = useState<any>(null);
-  const [activeClassTooltip, setActiveClassTooltip] = useState<any>(null);
-  const [pinnedClassTooltip, setPinnedClassTooltip] = useState<any>(null);
+  const [chartPanePercent, setChartPanePercent] = useState(67);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
+  const chartSplitRowRef = useRef<HTMLDivElement>(null);
+  const eventChartSurfaceRef = useRef<HTMLDivElement>(null);
+  const isDraggingSplitRef = useRef(false);
+
+  useEffect(() => {
+    isDraggingSplitRef.current = isDraggingSplit;
+  }, [isDraggingSplit]);
+
+  useEffect(() => {
+    if (!isDraggingSplit) return;
+    document.body.style.userSelect = 'none';
+    const onMove = (e: MouseEvent) => {
+      const el = chartSplitRowRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const w = rect.width;
+      if (w < 80) return;
+      const raw = ((e.clientX - rect.left) / w) * 100;
+      setChartPanePercent(Math.min(82, Math.max(28, raw)));
+    };
+    const onUp = () => setIsDraggingSplit(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [isDraggingSplit]);
 
   // Group points by event and class
   const eventPointsMap: Record<string, number> = {};
@@ -151,9 +180,18 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
         .slice(0, 8);
     }
 
+    const swimmersSorted =
+      !isClass && data.swimmers
+        ? [...data.swimmers].sort((a: any, b: any) => {
+            const pa = typeof a.points === 'number' ? a.points : 0;
+            const pb = typeof b.points === 'number' ? b.points : 0;
+            return pb - pa;
+          })
+        : [];
+
     return (
       <div 
-        className="bg-[#0c0f16] border border-gray-800 p-3 shadow-xl shadow-black/50 z-[999] pointer-events-auto h-full flex flex-col"
+        className="relative bg-[#0c0f16] border border-gray-800 p-3 shadow-xl shadow-black/50 z-[999] pointer-events-auto h-full flex flex-col"
         style={{ 
           resize: isPinned ? 'both' : 'none', 
           overflow: 'hidden',
@@ -188,7 +226,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
               )}
             </>
           ) : (
-            data.swimmers && data.swimmers.length > 0 ? data.swimmers.map((s: any, idx: number) => {
+            swimmersSorted.length > 0 ? swimmersSorted.map((s: any, idx: number) => {
               // Compute Cutlines dynamically
               const timeSec = convertTimeToSeconds(s.finalsTime || s.time);
               const cleanEvent = s.event.replace(" (Avg Split)", "").replace(/ Yard /i, " ").replace(/ Meter /i, " ").trim();
@@ -262,9 +300,15 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
             exit={{ height: 0, opacity: 0 }}
             className="border-t border-theme-soft surface-overlay"
           >
-            <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div
+              ref={chartSplitRowRef}
+              className="p-6 flex flex-col lg:flex-row lg:items-stretch gap-4 lg:gap-0 min-h-0"
+              style={{ ['--chartPane' as string]: `${chartPanePercent}%` }}
+            >
               {/* Stats & Charts */}
-              <div className="lg:col-span-8 space-y-4">
+              <div
+                className={`min-w-0 w-full space-y-4 lg:w-[var(--chartPane)] lg:max-w-[82%] lg:min-w-[200px] ${isDraggingSplit ? 'pointer-events-none' : ''}`}
+              >
                 <div className="flex items-center gap-2">
                   <BarChart3 size={14} className="text-rose-400" />
                   <span className="text-[10px] font-medium uppercase tracking-widest text-theme-secondary">Total Points by Event & Class</span>
@@ -272,7 +316,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
                 
                 <div className="space-y-4">
                   {/* Event Chart */}
-                  <div className="h-48 w-full surface-overlay p-2 rounded border border-theme-soft relative group/chart">
+                  <div ref={eventChartSurfaceRef} className="h-48 w-full min-w-0 surface-overlay p-2 rounded border border-theme-soft relative group/chart">
                     {/* Hover Tooltip (Absolute relative to chart) */}
                     {!pinnedTooltip && activeTooltip && (
                       <div 
@@ -304,47 +348,66 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
                     )}
 
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={eventData} onMouseLeave={() => setActiveTooltip(null)}>
+                      <LineChart
+                        data={eventData}
+                        onMouseMove={(state: any) => {
+                          if (isDraggingSplitRef.current) return;
+                          if (
+                            state &&
+                            state.activeTooltipIndex != null &&
+                            state.activeTooltipIndex >= 0 &&
+                            eventData[state.activeTooltipIndex]
+                          ) {
+                            const payload = eventData[state.activeTooltipIndex];
+                            const x = state.activeCoordinate?.x ?? 0;
+                            const y = state.activeCoordinate?.y ?? 0;
+                            const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
+                            setActiveTooltip({ x, y, payload, containerWidth: w });
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          if (!isDraggingSplitRef.current) setActiveTooltip(null);
+                        }}
+                        onClick={(state: any) => {
+                          if (isDraggingSplitRef.current) return;
+                          if (
+                            state &&
+                            state.activeTooltipIndex != null &&
+                            state.activeTooltipIndex >= 0 &&
+                            eventData[state.activeTooltipIndex]
+                          ) {
+                            const payload = eventData[state.activeTooltipIndex];
+                            const x = state.activeCoordinate?.x ?? 0;
+                            const y = state.activeCoordinate?.y ?? 0;
+                            const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
+                            setPinnedTooltip({ x, y, payload, containerWidth: w });
+                            setActiveTooltip(null);
+                          }
+                        }}
+                      >
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} width={30} />
-                        {/* We use a hidden tooltip just to ensure chart layout behaves, but disable its rendering */}
-                        <Tooltip content={<></>} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 }} />
-                        <Line 
-                          type="monotone" 
-                          dataKey="points" 
-                          stroke="#F43F5E" 
-                          strokeWidth={2} 
-                          dot={{ r: 4, fill: '#0c0f16', stroke: '#F43F5E', strokeWidth: 2 }} 
-                          activeDot={(props: any) => {
-                            const { cx, cy, payload } = props;
-                            return (
-                              <g>
-                                <circle cx={cx} cy={cy} r={6} fill="#F43F5E" stroke="#fff" strokeWidth={2} />
-                                <circle 
-                                  cx={cx} cy={cy} r={20} fill="transparent"
-                                  style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                                  onMouseEnter={(e) => {
-                                    const rect = (e.target as Element).closest('.recharts-wrapper')?.getBoundingClientRect();
-                                    setActiveTooltip({ x: cx, y: cy, payload, containerWidth: rect?.width || 500 });
-                                  }}
-                                  onMouseLeave={() => setActiveTooltip(null)}
-                                  onClick={(e) => {
-                                    const rect = (e.target as Element).closest('.recharts-wrapper')?.getBoundingClientRect();
-                                    setPinnedTooltip({ x: cx, y: cy, payload, containerWidth: rect?.width || 500 });
-                                    setActiveTooltip(null);
-                                  }}
-                                />
-                              </g>
-                            );
-                          }}
+                        <Tooltip
+                          wrapperStyle={{ visibility: 'hidden', pointerEvents: 'none' }}
+                          content={() => null}
+                          cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="points"
+                          stroke={team.color}
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                          activeDot={{ r: 5, fill: team.color, stroke: '#fff', strokeWidth: 1 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
 
                   {/* Class Chart */}
-                  <div className="h-40 w-full surface-overlay p-2 rounded border border-theme-soft relative group/chart">
+                  <div className="h-40 w-full min-w-0 surface-overlay p-2 rounded border border-theme-soft relative group/chart">
                     {/* Hover Tooltip (Absolute relative to chart) */}
                     {!pinnedClassTooltip && activeClassTooltip && (
                       <div 
@@ -419,8 +482,21 @@ export default function TeamCard({ team, index, gender, eventsList = [], searchQ
                 </div>
               </div>
 
+              <div
+                className="hidden lg:flex shrink-0 w-3 items-stretch justify-center cursor-col-resize group/split select-none touch-none"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize charts and team matrix"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  setIsDraggingSplit(true);
+                }}
+              >
+                <span className="w-px my-1 h-full bg-theme-soft group-hover/split:bg-rose-400/80 rounded-full transition-colors" />
+              </div>
+
               {/* Individual/Event Matrix */}
-              <div className="lg:col-span-4">
+              <div className="min-w-0 w-full flex-1">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <List size={14} className="text-rose-400" />
