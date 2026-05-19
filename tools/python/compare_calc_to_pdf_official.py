@@ -1,5 +1,6 @@
 import json, subprocess, sys, os, re
 from collections import defaultdict
+from pathlib import Path
 
 PDFS = [
     '2026_acc_championship_full_meet_results_1col.pdf',
@@ -8,17 +9,29 @@ PDFS = [
     'Big_12_S_D_Champ_Results_pdf.pdf'
 ]
 
-BASE = os.getcwd()
+REPO = Path(__file__).resolve().parents[2]
+BASE = str(REPO)
+PDF_PARSER = REPO / 'backend' / 'pdf_parser.py'
+POINT_CALC = REPO / 'backend' / 'point_calculator.py'
+ENV = {**os.environ, 'OMNI_PROJECT_ROOT': str(REPO), 'OMNI_DATA_DIR': str(REPO / 'data')}
 
 for pdf in PDFS:
     path = os.path.join(BASE, pdf)
     if not os.path.exists(path):
         continue
     print('\n===', pdf, '===')
-    out = subprocess.check_output([sys.executable, 'pdf_parser.py', path], cwd=BASE, timeout=120000)
+    out = subprocess.check_output([sys.executable, str(PDF_PARSER), path], cwd=BASE, timeout=120000, env=ENV)
     parsed = json.loads(out)
     # calc
-    proc = subprocess.Popen([sys.executable, 'point_calculator.py'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=BASE, text=True)
+    proc = subprocess.Popen(
+        [sys.executable, str(POINT_CALC)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=BASE,
+        text=True,
+        env=ENV,
+    )
     stdout, stderr = proc.communicate(json.dumps(parsed), timeout=120000)
     calc = json.loads(stdout)
     # aggregate computed totals

@@ -10,11 +10,30 @@ DEFAULT_NCAA_D2_SCORING = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 
 def _resolve_scoring_settings(scoring_settings=None):
     """Determines scoring configuration settings."""
     import os
+    from pathlib import Path
+
     cfg = {}
     if not scoring_settings:
         try:
-            with open('scoring_settings.json', 'r') as f:
-                settings_file = json.load(f)
+            settings_path = None
+            data_dir = os.environ.get('OMNI_DATA_DIR')
+            if data_dir:
+                candidate = Path(data_dir) / 'scoring_settings.json'
+                if candidate.is_file():
+                    settings_path = str(candidate)
+            if not settings_path:
+                repo_root = Path(__file__).resolve().parent.parent
+                for candidate in (
+                    repo_root / 'data' / 'scoring_settings.json',
+                    repo_root / 'scoring_settings.json',
+                    Path('scoring_settings.json'),
+                ):
+                    if candidate.is_file():
+                        settings_path = str(candidate.resolve())
+                        break
+            if settings_path:
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings_file = json.load(f)
                 for k, v in settings_file.items():
                     if isinstance(v, dict) and 'value' in v:
                         cfg[k] = v['value']

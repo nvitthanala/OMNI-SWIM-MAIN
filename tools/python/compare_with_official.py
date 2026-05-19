@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
+import os
 import sys, json, subprocess, re
 from collections import defaultdict
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+BACKEND = REPO / 'backend'
+PDF_PARSER = BACKEND / 'pdf_parser.py'
+POINT_CALC = BACKEND / 'point_calculator.py'
+ENV = {**os.environ, 'OMNI_PROJECT_ROOT': str(REPO), 'OMNI_DATA_DIR': str(REPO / 'data')}
 
 if len(sys.argv) < 2:
     print('Usage: python compare_with_official.py <pdf>')
@@ -24,7 +32,13 @@ official = {
 }
 
 # Run parser
-proc = subprocess.run([sys.executable, 'pdf_parser.py', pdf], capture_output=True, text=True)
+proc = subprocess.run(
+    [sys.executable, str(PDF_PARSER), pdf],
+    capture_output=True,
+    text=True,
+    cwd=str(REPO),
+    env=ENV,
+)
 try:
     parsed = json.loads(proc.stdout)
 except Exception as e:
@@ -33,7 +47,14 @@ except Exception as e:
     sys.exit(1)
 
 # Run scorer
-proc2 = subprocess.run([sys.executable, 'point_calculator.py'], input=json.dumps(parsed), capture_output=True, text=True)
+proc2 = subprocess.run(
+    [sys.executable, str(POINT_CALC)],
+    input=json.dumps(parsed),
+    capture_output=True,
+    text=True,
+    cwd=str(REPO),
+    env=ENV,
+)
 try:
     scored = json.loads(proc2.stdout)
 except Exception as e:
@@ -45,6 +66,7 @@ except Exception as e:
 team_event = {}  # team_event[(team,gender,event)] = {'points': float} or {'relay_shares': [...], 'relay_rank': rank}
 team_totals = defaultdict(lambda: defaultdict(float))  # team_totals[team][gender]
 # Need SCORING defaults
+sys.path.insert(0, str(BACKEND))
 import point_calculator as pc
 SC = pc._resolve_scoring_settings().get('scoringPoints')
 relay_mult = pc._resolve_scoring_settings().get('relayMultiplier')

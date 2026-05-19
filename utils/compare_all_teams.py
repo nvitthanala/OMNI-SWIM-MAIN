@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 import sys, json, subprocess, re, os
 from collections import defaultdict
+from pathlib import Path
 import pdfplumber
 
 if len(sys.argv) < 2:
     print('Usage: python compare_all_teams.py <pdf>')
     sys.exit(1)
 pdf=sys.argv[1]
+REPO = Path(__file__).resolve().parent.parent
+PDF_PARSER = REPO / 'backend' / 'pdf_parser.py'
+BACKEND = REPO / 'backend'
+env = {**os.environ, 'OMNI_PROJECT_ROOT': str(REPO), 'OMNI_DATA_DIR': str(REPO / 'data')}
 # parse pdf
-proc = subprocess.run([sys.executable, 'pdf_parser.py', pdf], capture_output=True, text=True)
+proc = subprocess.run([sys.executable, str(PDF_PARSER), pdf], capture_output=True, text=True, cwd=str(REPO), env=env)
 parsed=json.loads(proc.stdout)
-# Ensure point_calculator can be imported whether run from root or from utils/
-script_dir = os.path.dirname(os.path.abspath(__file__))
-if script_dir:
-    sys.path.insert(0, script_dir)
-    sys.path.insert(0, os.path.dirname(script_dir))
-sys.path.insert(0, os.getcwd())
+# Import scoring from backend package path
+sys.path.insert(0, str(BACKEND))
 from point_calculator import calculate_points
 scored = calculate_points(parsed)
 # compute our totals per team per gender (use team-level relay points once)

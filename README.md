@@ -67,8 +67,8 @@ Starting the application requires zero manual configuration. The project feature
 
 See the consolidated docs for details on scoring, parsing, and changelogs:
 
-- `CHANGELOG.md` — recent repository edits and notes.
-- `CODEBASE_DOCS.md` — consolidated documentation of parser and scoring logic, frontend hooks, and run instructions.
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — recent repository edits and notes.
+- [`docs/CODEBASE_DOCS.md`](docs/CODEBASE_DOCS.md) — consolidated documentation of parser and scoring logic, frontend hooks, and run instructions.
 
 ---
 
@@ -83,7 +83,7 @@ See the consolidated docs for details on scoring, parsing, and changelogs:
 
 - **PDF Ingestion**: Upload Hy-Tek meet results to populate the matrix
 - **Recruit Simulation**: Inject new swimmers to see how they impact team scores
-- **Auto-Save**: All data is saved to `meets.json` for easy sharing
+- **Auto-Save**: All data is saved to `data/meets.json` for easy sharing
 - **Safe Export**: Download your results as CSV at any time from the sidebar
 
 ---
@@ -108,9 +108,13 @@ npm run lint
 - `src/` – React frontend components and logic
 - `public/` – Static assets (logo, images)
 - `server.ts` – Express backend and API routes
-- `pdf_parser.py` – PDF text extraction and parsing
-- `point_calculator.py` – Meet scoring engine
-- `meets.json` – Data storage file
+- `backend/` – Runtime Python (`pdf_parser.py`, `point_calculator.py`) used by the server
+- `data/` – Local app data (`meets.json`, `scoring_settings.json` written at parse time)
+- `scripts/` – Node tooling (e.g. `scan_deps.mjs`, asset helpers)
+- `tests/` – Parser/scoring harnesses and sample outputs
+- `docs/` – Changelog and consolidated technical documentation
+- `tools/python/` – Optional analysis and comparison scripts
+- `utils/` – Additional Python helpers used by tooling
 
 ---
 

@@ -1,10 +1,13 @@
 import json, sys, io
-sys.path.insert(0, '.')
+from pathlib import Path
 from collections import defaultdict
-from utils.point_calculator import calculate_points
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / 'backend'))
+from point_calculator import calculate_points
 
 # Load parsed data
-data = json.load(open('parsed_nsisc.json'))
+data = json.load(open(REPO / 'parsed_nsisc.json', encoding='utf-8'))
 print(f'Loaded {len(data)} athletes')
 
 # Calculate points

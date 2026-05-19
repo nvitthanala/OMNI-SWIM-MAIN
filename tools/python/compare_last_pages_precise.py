@@ -4,13 +4,19 @@ import json, subprocess, sys, os
 from collections import defaultdict
 import difflib
 
+from pathlib import Path
+
 PDFS = [
     '2026_acc_championship_full_meet_results_1col.pdf',
     '2026_NSISC_Championships_Final_Results.pdf',
     'glvc_results26.pdf',
     'Big_12_S_D_Champ_Results_pdf.pdf'
 ]
-BASE = os.getcwd()
+REPO = Path(__file__).resolve().parents[2]
+BASE = str(REPO)
+PDF_PARSER = REPO / 'backend' / 'pdf_parser.py'
+POINT_CALC = REPO / 'backend' / 'point_calculator.py'
+ENV = {**os.environ, 'OMNI_PROJECT_ROOT': str(REPO), 'OMNI_DATA_DIR': str(REPO / 'data')}
 
 rank_regexes = [
     re.compile(r'^\s*(\d{1,2})\.\s+(.+?)\s+(\d{1,5})$'),
@@ -54,9 +60,17 @@ def extract_official_from_last_pages(path, pages_to_scan=3):
 
 
 def compute_from_parser(path):
-    out = subprocess.check_output([sys.executable, 'pdf_parser.py', path], cwd=BASE, timeout=120000)
+    out = subprocess.check_output([sys.executable, str(PDF_PARSER), path], cwd=BASE, timeout=120000, env=ENV)
     parsed = json.loads(out)
-    proc = subprocess.Popen([sys.executable, 'point_calculator.py'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=BASE, text=True)
+    proc = subprocess.Popen(
+        [sys.executable, str(POINT_CALC)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=BASE,
+        text=True,
+        env=ENV,
+    )
     stdout, stderr = proc.communicate(json.dumps(parsed), timeout=120000)
     if proc.returncode != 0:
         raise RuntimeError('point_calculator failed: ' + stderr)

@@ -13,7 +13,7 @@ if errorlevel 1 goto missing_python
 echo [OK] Python is installed.
 
 echo [!] Initializing Omni Swim Setup (Scanning dependencies)...
-node scan_deps.mjs
+node scripts\scan_deps.mjs
 
 echo ===================================================
 echo [!] CLEANING UP STALE SERVER PROCESSES...

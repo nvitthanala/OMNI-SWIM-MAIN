@@ -6,22 +6,56 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { v4 as uuidv4 } from 'uuid';
 import { spawn, execSync } from 'child_process';
 import { Gender, ClassYear, SwimmerResult, Workspace } from './src/types';
 
 const PORT = 3000;
-const MEETS_FILE = path.join(process.cwd(), 'meets.json');
+const __filename = fileURLToPath(import.meta.url);
+const PROJECT_ROOT = path.dirname(__filename);
+const DATA_DIR = path.join(PROJECT_ROOT, 'data');
+const MEETS_FILE = path.join(DATA_DIR, 'meets.json');
+const PDF_PARSER_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'pdf_parser.py');
+const POINT_CALCULATOR_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'point_calculator.py');
+
+function migrateLegacyDataPaths() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const legacyMeets = path.join(PROJECT_ROOT, 'meets.json');
+    if (fs.existsSync(legacyMeets)) {
+      fs.renameSync(legacyMeets, MEETS_FILE);
+    }
+    const legacyScoring = path.join(PROJECT_ROOT, 'scoring_settings.json');
+    const scoringInData = path.join(DATA_DIR, 'scoring_settings.json');
+    if (fs.existsSync(legacyScoring) && !fs.existsSync(scoringInData)) {
+      fs.renameSync(legacyScoring, scoringInData);
+    }
+  } catch (e) {
+    console.warn('Legacy data path migration skipped:', e);
+  }
+}
 
 async function runPythonScript(scriptPath: string, args: string[], stdin?: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const venvPython = process.platform === 'win32' ? path.join(process.cwd(), 'venv', 'Scripts', 'python') : path.join(process.cwd(), 'venv', 'bin', 'python');
-    const pythonCmd = fs.existsSync(venvPython) ? venvPython : (process.platform === 'win32' ? 'python' : 'python3');
-    
+    const venvPython =
+      process.platform === 'win32'
+        ? path.join(PROJECT_ROOT, 'venv', 'Scripts', 'python')
+        : path.join(PROJECT_ROOT, 'venv', 'bin', 'python');
+    const pythonCmd = fs.existsSync(venvPython) ? venvPython : process.platform === 'win32' ? 'python' : 'python3';
+    const spawnEnv = {
+      ...process.env,
+      OMNI_PROJECT_ROOT: PROJECT_ROOT,
+      OMNI_DATA_DIR: DATA_DIR,
+    };
+
     let proc;
     try {
-      proc = spawn(pythonCmd, [scriptPath, ...args]);
+      proc = spawn(pythonCmd, [scriptPath, ...args], {
+        cwd: PROJECT_ROOT,
+        env: spawnEnv,
+      });
     } catch (err) {
       return reject(new Error(`Failed to spawn Python process: ${err}`));
     }
@@ -104,22 +138,24 @@ const defaultScoringSettings = {
 };
 
 async function startServer() {
+  migrateLegacyDataPaths();
+
   // Ensure pdfplumber is installed in a venv
   try {
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const venvPath = path.join(process.cwd(), 'venv');
+    const venvPath = path.join(PROJECT_ROOT, 'venv');
     if (!fs.existsSync(venvPath)) {
       console.log('Creating virtual environment...');
-      execSync(`${pythonCmd} -m venv venv`, { stdio: 'ignore' });
+      execSync(`${pythonCmd} -m venv venv`, { stdio: 'ignore', cwd: PROJECT_ROOT });
     }
-    
+
     const venvPython = process.platform === 'win32' ? path.join(venvPath, 'Scripts', 'python') : path.join(venvPath, 'bin', 'python');
     try {
-      execSync(`${venvPython} -c "import pdfplumber"`, { stdio: 'ignore' });
+      execSync(`${venvPython} -c "import pdfplumber"`, { stdio: 'ignore', cwd: PROJECT_ROOT });
     } catch (e) {
       console.log('Installing pdfplumber in venv...');
       const pipCmd = process.platform === 'win32' ? path.join(venvPath, 'Scripts', 'pip') : path.join(venvPath, 'bin', 'pip');
-      execSync(`${pipCmd} install pdfplumber`, { stdio: 'inherit' });
+      execSync(`${pipCmd} install pdfplumber`, { stdio: 'inherit', cwd: PROJECT_ROOT });
     }
   } catch (err) {
     console.error('Warning: Could not set up Python virtual environment.', err);
@@ -127,6 +163,8 @@ async function startServer() {
 
   const app = express();
   app.use(express.json({ limit: '50mb' }));
+
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 
   // Ensure meets.json exists
   if (!fs.existsSync(MEETS_FILE)) {
@@ -184,7 +222,7 @@ async function startServer() {
   });
 
   app.post('/api/parse-pdf', async (req, res) => {
-    const tempFile = path.join(process.cwd(), `temp_${Date.now()}.pdf`);
+    const tempFile = path.join(PROJECT_ROOT, `temp_${Date.now()}.pdf`);
     let responseSent = false;
 
     try {
@@ -212,7 +250,7 @@ async function startServer() {
       // Run pdf parser
       let parserOutput;
       try {
-        parserOutput = await runPythonScript('pdf_parser.py', [tempFile, format || 'auto']);
+        parserOutput = await runPythonScript(PDF_PARSER_SCRIPT, [tempFile, format || 'auto']);
       } catch (err) {
         responseSent = true;
         return res.status(500).json({ error: 'PDF parsing failed', details: String(err) });
@@ -238,15 +276,15 @@ async function startServer() {
         const workspaces = JSON.parse(fs.readFileSync(MEETS_FILE, 'utf-8'));
         const ws = workspaces && workspaces[0] ? workspaces[0] : null;
         const scoring = ws && ws.scoringSettings ? ws.scoringSettings : defaultScoringSettings;
-        fs.writeFileSync(path.join(process.cwd(), 'scoring_settings.json'), JSON.stringify(scoring, null, 2));
+        fs.writeFileSync(path.join(DATA_DIR, 'scoring_settings.json'), JSON.stringify(scoring, null, 2));
       } catch (e) {
-        console.warn('Could not write scoring_settings.json, using defaults.');
+        console.warn('Could not write data/scoring_settings.json, using defaults.');
       }
 
       // Run point calculator
       let calcOutput;
       try {
-        calcOutput = await runPythonScript(path.join('utils', 'point_calculator.py'), [], parserOutput);
+        calcOutput = await runPythonScript(POINT_CALCULATOR_SCRIPT, [], parserOutput);
       } catch (err) {
         responseSent = true;
         return res.status(500).json({ error: 'Points calculation failed', details: String(err) });
@@ -302,12 +340,13 @@ async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
+      root: PROJECT_ROOT,
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(PROJECT_ROOT, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

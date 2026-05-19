@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
+import os
 import sys, json, subprocess
 from collections import defaultdict
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+PDF_PARSER = REPO / 'backend' / 'pdf_parser.py'
+POINT_CALC = REPO / 'backend' / 'point_calculator.py'
 
 if len(sys.argv) < 2:
     print('Usage: python analyze_parsed.py <pdf>')
     sys.exit(1)
 
 pdf=sys.argv[1]
-proc = subprocess.run([sys.executable, 'pdf_parser.py', pdf], capture_output=True, text=True)
+proc = subprocess.run(
+    [sys.executable, str(PDF_PARSER), pdf],
+    capture_output=True,
+    text=True,
+    cwd=str(REPO),
+    env={**os.environ, 'OMNI_PROJECT_ROOT': str(REPO), 'OMNI_DATA_DIR': str(REPO / 'data')},
+)
 parsed = json.loads(proc.stdout)
 
 team_counts = defaultdict(int)
@@ -37,7 +49,14 @@ for t in sorted(team_counts.keys()):
         print(t)
 
 # Run scorer to analyze awarded points
-proc2 = subprocess.run([sys.executable, 'point_calculator.py'], input=json.dumps(parsed), capture_output=True, text=True)
+proc2 = subprocess.run(
+    [sys.executable, str(POINT_CALC)],
+    input=json.dumps(parsed),
+    capture_output=True,
+    text=True,
+    cwd=str(REPO),
+    env={**os.environ, 'OMNI_PROJECT_ROOT': str(REPO), 'OMNI_DATA_DIR': str(REPO / 'data')},
+)
 scored = json.loads(proc2.stdout)
 
 team_stats = defaultdict(lambda: {'points':0.0,'scored':0,'na':0,'relays':0})

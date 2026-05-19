@@ -1,13 +1,16 @@
 import json, sys, io
-sys.path.insert(0, '.')
+from pathlib import Path
 from collections import defaultdict
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / 'backend'))
 from point_calculator import calculate_points
 
 # Override stdout to capture
 old_out = sys.stdout
 sys.stdout = io.StringIO()
 
-data = json.load(open('parsed_nsisc.json'))
+data = json.load(open(REPO / 'parsed_nsisc.json', encoding='utf-8'))
 scored = calculate_points(data)
 
 sys.stdout = old_out

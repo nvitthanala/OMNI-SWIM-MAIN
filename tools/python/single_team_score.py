@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
+import os
 import sys
 import json
 import subprocess
 from collections import defaultdict
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+BACKEND = REPO / 'backend'
+PDF_PARSER = BACKEND / 'pdf_parser.py'
+ENV = {**os.environ, 'OMNI_PROJECT_ROOT': str(REPO), 'OMNI_DATA_DIR': str(REPO / 'data')}
 
 if len(sys.argv) < 3:
     print("Usage: python single_team_score.py <pdf_path> <team_name>")
@@ -12,7 +19,13 @@ pdf = sys.argv[1]
 team_name = sys.argv[2]
 
 # Run parser
-proc = subprocess.run([sys.executable, 'pdf_parser.py', pdf], capture_output=True, text=True)
+proc = subprocess.run(
+    [sys.executable, str(PDF_PARSER), pdf],
+    capture_output=True,
+    text=True,
+    cwd=str(REPO),
+    env=ENV,
+)
 if proc.returncode != 0:
     print('pdf_parser failed:', proc.stderr)
     sys.exit(1)
@@ -20,8 +33,12 @@ if proc.returncode != 0:
 athletes = json.loads(proc.stdout)
 
 # Import calculator
+sys.path.insert(0, str(BACKEND))
+import point_calculator as pc
 from point_calculator import calculate_points
+
 scored = calculate_points(athletes)
+SC = pc._resolve_scoring_settings().get('scoringPoints', [])
 
 # Sum points per event for the given team
 per_event = defaultdict(float)
@@ -51,12 +68,7 @@ for a in scored:
         team_pts = None
         if rank and str(rank).isdigit():
             idx = int(rank) - 1
-            if 0 <= idx < len(__import__('point_calculator').point_calculator.SCORING if hasattr(__import__('point_calculator'), 'point_calculator') else __import__('point_calculator').SCORING):
-                # safe import of SCORING
-                try:
-                    SC = __import__('point_calculator').SCORING
-                except Exception:
-                    SC = __import__('point_calculator').SCORING
+            if 0 <= idx < len(SC):
                 team_pts = SC[idx] * 2
         # fallback: use swimmer-level sum for the event if rank-based not available
         if team_pts is None:

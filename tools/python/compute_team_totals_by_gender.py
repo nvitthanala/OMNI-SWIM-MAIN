@@ -1,12 +1,19 @@
 import json
 from collections import defaultdict
+from pathlib import Path
 
-with open('meets.json','r',encoding='utf-8') as f:
+REPO = Path(__file__).resolve().parents[2]
+meets_path = REPO / 'data' / 'meets.json'
+if not meets_path.is_file():
+    meets_path = REPO / 'meets.json'
+
+with open(meets_path, 'r', encoding='utf-8') as f:
     workspaces = json.load(f)
 
 for ws in workspaces:
     men = ws.get('menResults', [])
     women = ws.get('womenResults', [])
+
     def sum_by_team(records):
         totals = defaultdict(float)
         for a in records:
@@ -18,10 +25,10 @@ for ws in workspaces:
                     pts_val = float(pts)
                 except Exception:
                     try:
-                        pts_val = float(a.get('points',0))
+                        pts_val = float(a.get('points', 0))
                     except Exception:
                         pts_val = 0.0
-            totals[a.get('team','UNKNOWN')] += pts_val
+            totals[a.get('team', 'UNKNOWN')] += pts_val
         return totals
 
     men_totals = sum_by_team(men)
@@ -43,5 +50,5 @@ for ws in workspaces:
     print('\nCombined totals:')
     for team, pts in sorted(combined.items(), key=lambda x: -x[1]):
         print(f"  {team}: {pts}")
-    print('\nChecked sum: men+women == combined? ', sum(men_totals.values())+sum(women_totals.values()) == sum(combined.values()))
+    print('\nChecked sum: men+women == combined? ', sum(men_totals.values()) + sum(women_totals.values()) == sum(combined.values()))
     print('\n---\n')

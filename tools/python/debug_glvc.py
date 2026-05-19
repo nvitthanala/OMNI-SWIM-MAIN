@@ -1,15 +1,14 @@
 import pdfplumber
 import os
 import re
+from pathlib import Path
 
-base = r"C:\Users\nihar\Desktop\remix_-omni-swim"
-os.chdir(base)
+REPO = Path(__file__).resolve().parents[2]
+os.chdir(REPO)
 
 YEAR_PATTERN = r'\b(FR|SO|JR|SR|5Y|FY|GS|GR)\b'
 
-with pdfplumber.open("glvc_results26.pdf") as pdf:
-    # Check pages that have individual swimming events (not just relays)
-    # Let's find pages with year markers (FR, SO, JR, SR)
+with pdfplumber.open(REPO / 'glvc_results26.pdf') as pdf:
     for pg in range(min(10, len(pdf.pages))):
         text = pdf.pages[pg].extract_text(layout=True)
         lines = text.split("\n")
@@ -24,7 +23,6 @@ with pdfplumber.open("glvc_results26.pdf") as pdf:
                     if count >= 25:
                         break
 
-    # Also check what the "no layout" output looks like for individual events
     print("\n\n=== Page with individual events (no layout) ===")
     for pg in range(3, min(8, len(pdf.pages))):
         text = pdf.pages[pg].extract_text()

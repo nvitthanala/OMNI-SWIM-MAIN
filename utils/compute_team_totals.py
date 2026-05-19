@@ -3,9 +3,13 @@ from collections import defaultdict
 # Import necessary helper functions for complex scoring rules and time conversions
 # Assuming these are implemented in point_calculator.py
 try:
-    from utils.point_calculator import allowed_rounds_for_conference, calculate_individual_score, is_valid_time_format
+    import sys
+    from pathlib import Path
+    _backend = Path(__file__).resolve().parent.parent / 'backend'
+    sys.path.insert(0, str(_backend))
+    from point_calculator import allowed_rounds_for_conference, calculate_individual_score, is_valid_time_format
 except ImportError:
-    print("Warning: Could not import required functions from utils/point_calculator.py. Scoring may fail.")
+    print("Warning: Could not import required functions from backend/point_calculator.py. Scoring may fail.")
 
 def compute_team_totals(data_source_json):
     """
@@ -89,10 +93,16 @@ def compute_class_totals(data_source_json):
     print("--- Class Scoring Logic Placeholder ---")
     return class_totals
 
-def process_all_scoring(meets_json_path='meets.json'):
+def process_all_scoring(meets_json_path=None):
     """
     Master function to compute all necessary scores: Team Totals and Class Totals.
     """
+    if meets_json_path is None:
+        from pathlib import Path
+        repo = Path(__file__).resolve().parent.parent
+        meets_json_path = str(repo / 'data' / 'meets.json')
+        if not Path(meets_json_path).is_file():
+            meets_json_path = str(repo / 'meets.json')
     try:
         with open(meets_json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)

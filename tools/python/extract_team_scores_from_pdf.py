@@ -2,6 +2,9 @@ import pdfplumber
 import re
 import sys
 import os
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
 
 PDFS = [
     '2026_acc_championship_full_meet_results_1col.pdf',
@@ -11,7 +14,7 @@ PDFS = [
 ]
 
 for pdf in PDFS:
-    path = os.path.join(os.getcwd(), pdf)
+    path = str(REPO / pdf)
     if not os.path.exists(path):
         print(pdf, 'NOT FOUND')
         continue

@@ -4,7 +4,7 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+  const env = loadEnv(mode, __dirname, '');
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -12,7 +12,7 @@ export default defineConfig(({mode}) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, 'src'),
       },
     },
     server: {
@@ -20,8 +20,14 @@ export default defineConfig(({mode}) => {
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: {
-        // Prevent Vite from reloading the page when server writes scoring_settings.json or meets.json
-        ignored: ['**/scoring_settings.json', '**/meets.json', '**/*.json'],
+        // Prevent Vite from reloading the page when server writes app data JSON
+        ignored: [
+          '**/data/scoring_settings.json',
+          '**/data/meets.json',
+          '**/scoring_settings.json',
+          '**/meets.json',
+          '**/*.json',
+        ],
       },
     },
   };

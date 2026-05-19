@@ -27,7 +27,7 @@ else
 fi
 
 echo "[!] Scanning and installing dependencies..."
-node scan_deps.mjs
+node scripts/scan_deps.mjs
 
 echo "==================================================="
 echo "[!] STARTING OMNI SWIM APP..."
