@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { Trophy, Users, Plus, ChevronDown, TrendingUp, Clock, Briefcase, Search, UserMinus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { Gender, Workspace, SwimmerResult, Recruit, ClassYear, TeamScore, ScoringSettings } from '../types';
 import { calculatePoints, convertToSCY, getTeamColor, simulateRoster } from '../lib/utils';
 import TeamCard from './TeamCard';
@@ -46,6 +47,8 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
 
   // Calculate scores per event and aggregate by team
   const teamsMap: Record<string, TeamScore> = {};
+  const timelineData: any[] = [];
+  const runningTotals: Record<string, number> = {};
 
   events.forEach(event => {
     const eventResults = allResults.filter(r => r.event === event);
@@ -59,10 +62,24 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           swimmers: [],
           color: getTeamColor(res.team, Object.keys(teamsMap).length)
         };
+        runningTotals[res.team] = 0;
       }
-      teamsMap[res.team].totalPoints += typeof res.points === 'number' ? res.points : 0;
+      const pts = typeof res.points === 'number' ? res.points : 0;
+      teamsMap[res.team].totalPoints += pts;
       teamsMap[res.team].swimmers.push(res);
+      runningTotals[res.team] += pts;
     });
+
+    const timelinePoint: any = { 
+        name: event.replace(' Freestyle', ' Free').replace('Individual Medley', 'IM').replace('Backstroke', 'Back').replace('Breaststroke', 'Breast').replace('Butterfly', 'Fly').substring(0, 15), 
+        fullEvent: event 
+    };
+    Object.keys(runningTotals).forEach(team => {
+        timelinePoint[team] = runningTotals[team];
+    });
+    if (Object.keys(runningTotals).length > 0) {
+        timelineData.push(timelinePoint);
+    }
   });
 
   const sortedTeams = Object.values(teamsMap).sort((a, b) => b.totalPoints - a.totalPoints);
@@ -125,6 +142,43 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   return (
     <div className="grid grid-cols-12 gap-6">
       <div className="col-span-8 space-y-6">
+        {/* Timeline Graph */}
+        <div className="surface-card rounded-lg p-5 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={16} className="text-rose-400" />
+            <h3 className="text-[12px] font-bold text-[var(--text-primary)] uppercase tracking-tight">Chronological Team Score Timeline</h3>
+          </div>
+          
+          <div className="h-64 w-full surface-overlay p-2 rounded border border-theme-soft">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={timelineData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 9, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
+                <Tooltip 
+                  cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
+                  contentStyle={{ background: '#0c0f16', border: '1px solid #1f2937', fontSize: '10px', color: '#fff', borderRadius: '8px', padding: '10px' }}
+                  labelStyle={{ color: '#F43F5E', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}
+                  itemStyle={{ color: '#fff', fontSize: '10px', fontWeight: 'medium' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+                {sortedTeams.map(team => (
+                  <Line 
+                    key={team.teamName}
+                    type="monotone" 
+                    dataKey={team.teamName} 
+                    name={team.teamName}
+                    stroke={team.color} 
+                    strokeWidth={2} 
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
         {/* Performance Matrix: Chart Area */}
         <div className="surface-card rounded-lg p-5">
           <div className="flex justify-between items-end mb-6">
@@ -172,6 +226,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
                   team={team} 
                   index={index} 
                   gender={gender} 
+                  eventsList={events}
                   searchQuery={searchQuery}
                   onUpdateTime={(id, newTime) => {
                     const field = gender === Gender.MEN ? 'menResults' : 'womenResults';

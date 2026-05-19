@@ -5,6 +5,7 @@
 
 import { Gender, SwimmerResult, Recruit, ClassYear, ScoringSettings } from '../types';
 import { CONVERSION_FACTORS, SCORING_POINTS } from '../constants';
+import teamColorsData from '../team_colors.json';
 
 export function convertTimeToSeconds(timeStr: string): number {
   if (!timeStr || timeStr === 'NT' || timeStr === 'DQ') return Infinity;
@@ -191,6 +192,19 @@ export function getYearsRemaining(year: ClassYear): number {
 }
 
 export function getTeamColor(teamName: string, index: number): string {
+  const normalizedMap: Record<string, string> = {};
+  for (const [key, val] of Object.entries(teamColorsData)) {
+    normalizedMap[key.toLowerCase()] = val;
+  }
+  
+  const searchName = teamName.toLowerCase();
+  if (normalizedMap[searchName]) return normalizedMap[searchName];
+  
+  // Sort keys by length descending to match the most specific name first
+  const sortedKeys = Object.keys(normalizedMap).sort((a, b) => b.length - a.length);
+  const match = sortedKeys.find(k => k.includes(searchName) || searchName.includes(k));
+  if (match) return normalizedMap[match];
+
   const hash = Array.from(teamName).reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const colors = [
     '#00F5FF', // Neon Cyan

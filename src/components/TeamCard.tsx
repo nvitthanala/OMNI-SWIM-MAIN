@@ -13,7 +13,7 @@ import {
   List
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { TeamScore, SwimmerResult, ClassYear, Gender } from '../types';
 import { getYearsRemaining, convertTimeToSeconds, formatSecondsToTime } from '../lib/utils';
 import { cutlines } from '../cutlines';
@@ -22,12 +22,13 @@ interface Props {
   team: TeamScore;
   index: number;
   gender: Gender;
+  eventsList?: string[];
   key?: string | number;
   searchQuery?: string;
   onUpdateTime?: (id: string, newTime: string) => void;
 }
 
-export default function TeamCard({ team, index, gender, searchQuery, onUpdateTime }: Props) {
+export default function TeamCard({ team, index, gender, eventsList = [], searchQuery, onUpdateTime }: Props) {
   const [isExpanded, setIsExpanded] = useState(index === 0);
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -36,22 +37,38 @@ export default function TeamCard({ team, index, gender, searchQuery, onUpdateTim
   // Group points by event and class
   const eventPointsMap: Record<string, number> = {};
   const classData = [
-    { name: 'FR', points: 0, color: '#39FF14' },
-    { name: 'SO', points: 0, color: '#00F5FF' },
-    { name: 'JR', points: 0, color: '#FF00FF' },
-    { name: 'SR', points: 0, color: '#FFD700' },
+    { name: 'FR', points: 0, color: '#39FF14', swimmers: [] as SwimmerResult[] },
+    { name: 'SO', points: 0, color: '#00F5FF', swimmers: [] as SwimmerResult[] },
+    { name: 'JR', points: 0, color: '#FF00FF', swimmers: [] as SwimmerResult[] },
+    { name: 'SR', points: 0, color: '#FFD700', swimmers: [] as SwimmerResult[] },
   ];
 
   team.swimmers.forEach(s => {
     if (!eventPointsMap[s.event]) eventPointsMap[s.event] = 0;
     eventPointsMap[s.event] += typeof s.points === 'number' ? s.points : 0;
     const entry = classData.find(d => d.name === s.classYear);
-    if (entry) entry.points += typeof s.points === 'number' ? s.points : 0;
+    if (entry) {
+      entry.points += typeof s.points === 'number' ? s.points : 0;
+      entry.swimmers.push(s);
+    }
   });
 
   const eventData = Object.entries(eventPointsMap)
-    .map(([name, points]) => ({ name: name.replace(' Freestyle', ' Free').replace('Individual Medley', 'IM').replace('Backstroke', 'Back').replace('Breaststroke', 'Breast').replace('Butterfly', 'Fly').substring(0, 12), fullEvent: name, points }))
-    .sort((a, b) => b.points - a.points);
+    .map(([name, points]) => {
+      const swimmers = team.swimmers.filter(s => s.event === name);
+      return { 
+        name: name.replace(' Freestyle', ' Free').replace('Individual Medley', 'IM').replace('Backstroke', 'Back').replace('Breaststroke', 'Breast').replace('Butterfly', 'Fly').substring(0, 12), 
+        fullEvent: name, 
+        points,
+        swimmers 
+      };
+    });
+
+  if (eventsList.length > 0) {
+    eventData.sort((a, b) => eventsList.indexOf(a.fullEvent) - eventsList.indexOf(b.fullEvent));
+  } else {
+    eventData.sort((a, b) => b.points - a.points);
+  }
 
   // Group by swimmer for drill-down
   let topSwimmers = Object.values(
@@ -138,38 +155,105 @@ export default function TeamCard({ team, index, gender, searchQuery, onUpdateTim
                 
                 <div className="space-y-4">
                   {/* Event Chart */}
-                  <div className="h-32 w-full surface-overlay p-2 rounded border border-theme-soft">
+                  <div className="h-48 w-full surface-overlay p-2 rounded border border-theme-soft">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={eventData.slice(0, 8)}>
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 9, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
+                      <LineChart data={eventData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
+                        <YAxis hide domain={['auto', 'auto']} />
                         <Tooltip 
-                          cursor={{ fill: 'rgba(255,255,255,0.03)' }} 
-                          contentStyle={{ background: '#0c0f16', border: '1px solid #1f2937', fontSize: '10px', color: '#fff' }}
-                          itemStyle={{ color: '#fff' }}
-                          labelStyle={{ color: '#fff' }}
-                          formatter={(val: number) => [val.toFixed(1), 'Pts']}
-                          labelFormatter={(label, payload) => payload?.[0]?.payload?.fullEvent || label}
+                          cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
+                          contentStyle={{ background: '#0c0f16', border: '1px solid #1f2937', fontSize: '10px', color: '#fff', borderRadius: '8px', padding: '10px', minWidth: '250px' }}
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-[#0c0f16] border border-gray-800 p-3 rounded-lg shadow-xl shadow-black/50 z-50 pointer-events-auto">
+                                  <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-800">
+                                    <h4 className="font-bold text-rose-400 uppercase tracking-widest text-[11px]">{data.fullEvent}</h4>
+                                    <span className="font-mono font-black text-[12px]">{data.points.toFixed(1)} PTS</span>
+                                  </div>
+                                  <div className="space-y-1 mt-2">
+                                    {data.swimmers && data.swimmers.length > 0 ? data.swimmers.map((s: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between text-[9px] py-1 border-b border-gray-800/50 last:border-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-4 font-mono text-gray-500">{s.rank || '-'}</span>
+                                          {s.podium === 'gold' && <span className="text-yellow-400" title="Gold">🥇</span>}
+                                          {s.podium === 'silver' && <span className="text-gray-300" title="Silver">🥈</span>}
+                                          {s.podium === 'bronze' && <span className="text-orange-400" title="Bronze">🥉</span>}
+                                          <span className="font-medium text-gray-200">{s.name}</span>
+                                          {s.cutline_achieved && <span className="text-[8px] bg-rose-500/20 text-rose-400 px-1 rounded ml-1">CUT</span>}
+                                        </div>
+                                        <div className="flex gap-3 text-right">
+                                          <span className="font-mono text-gray-500 w-12">{s.prelimsTime ? `P:${s.prelimsTime}` : ''}</span>
+                                          <span className="font-mono text-gray-300 w-12">{s.finalsTime ? `F:${s.finalsTime}` : s.time}</span>
+                                          <span className="font-mono text-emerald-400 font-bold w-6">{typeof s.points === 'number' ? s.points.toFixed(1) : s.points}</span>
+                                        </div>
+                                      </div>
+                                    )) : (
+                                      <div className="text-gray-500 text-[9px] italic">No scoring swimmers</div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
                         />
-                        <Bar dataKey="points" radius={[2, 2, 0, 0]}>
-                          {eventData.slice(0, 8).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#00F5FF' : '#39FF14'} opacity={0.8} />
-                          ))}
-                        </Bar>
-                      </BarChart>
+                        <Line 
+                          type="monotone" 
+                          dataKey="points" 
+                          stroke="#F43F5E" 
+                          strokeWidth={2} 
+                          dot={{ r: 4, fill: '#0c0f16', stroke: '#F43F5E', strokeWidth: 2 }} 
+                          activeDot={{ r: 6, fill: '#F43F5E', stroke: '#fff', strokeWidth: 2, onClick: (e, payload) => console.log('pinned', payload) }}
+                        />
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
 
                   {/* Class Chart */}
-                  <div className="h-28 w-full surface-overlay p-2 rounded border border-theme-soft">
+                  <div className="h-40 w-full surface-overlay p-2 rounded border border-theme-soft">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={classData}>
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
                         <Tooltip 
                           cursor={{ fill: 'rgba(255,255,255,0.03)' }} 
-                          contentStyle={{ background: '#0c0f16', border: '1px solid #1f2937', fontSize: '10px', color: '#fff' }}
-                          itemStyle={{ color: '#fff' }}
-                          labelStyle={{ color: '#fff' }}
-                          formatter={(val: number) => [val.toFixed(1), 'Pts']}
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              // Aggregate points by swimmer for the class
+                              const swimmerPts: Record<string, number> = {};
+                              data.swimmers.forEach((s: SwimmerResult) => {
+                                if (!swimmerPts[s.name]) swimmerPts[s.name] = 0;
+                                swimmerPts[s.name] += typeof s.points === 'number' ? s.points : 0;
+                              });
+                              const topPerformers = Object.entries(swimmerPts)
+                                .sort((a, b) => b[1] - a[1])
+                                .slice(0, 5);
+
+                              return (
+                                <div className="bg-[#0c0f16] border border-gray-800 p-3 rounded-lg shadow-xl shadow-black/50 z-50 pointer-events-auto min-w-[200px]">
+                                  <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-800">
+                                    <h4 className="font-bold text-rose-400 uppercase tracking-widest text-[11px]">Class of {data.name}</h4>
+                                    <span className="font-mono font-black text-[12px]">{data.points.toFixed(1)} PTS</span>
+                                  </div>
+                                  <div className="space-y-1 mt-2">
+                                    <div className="text-[9px] text-gray-500 font-bold uppercase mb-1">Top Performers</div>
+                                    {topPerformers.length > 0 ? topPerformers.map(([name, pts], idx) => (
+                                      <div key={idx} className="flex items-center justify-between text-[10px] py-0.5 border-b border-gray-800/30 last:border-0">
+                                        <span className="font-medium text-gray-200 truncate pr-2">{name}</span>
+                                        <span className="font-mono text-emerald-400 font-bold">{pts.toFixed(1)}</span>
+                                      </div>
+                                    )) : (
+                                      <div className="text-gray-500 text-[9px] italic">No scoring swimmers</div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
                         />
                         <Bar dataKey="points" radius={[2, 2, 0, 0]}>
                           {classData.map((entry, index) => (
@@ -182,7 +266,7 @@ export default function TeamCard({ team, index, gender, searchQuery, onUpdateTim
                 </div>
 
                 <div className="flex justify-between mt-2 px-2 text-[10px] text-theme-secondary font-mono border-t border-theme-soft pt-2 italic uppercase">
-                  <span>Top 8 Scoring Events</span>
+                  <span>Chronological Event Scoring Timeline</span>
                   <span>{eventData.reduce((acc, d) => acc + d.points, 0).toFixed(1)} PTS TOTAL</span>
                 </div>
               </div>

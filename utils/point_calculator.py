@@ -9,44 +9,45 @@ DEFAULT_NCAA_D2_SCORING = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 
 
 def _resolve_scoring_settings(scoring_settings=None):
     """Determines scoring configuration settings."""
-    # Default: standard conference meet scoring.
+    import os
+    cfg = {}
     if not scoring_settings:
-        return {
-            'scoringPoints': DEFAULT_NCAA_D2_SCORING,
-            'relayMultiplier': 2,
-            'halfRateRelaySwimmer': True,
-            'maxIndividualScorersPerTeam': 999,  # No cap for conference scoring
-            'maxRelaysScoringPerTeam': 2,         # Hard limit: A and B finals only (A & B only)
-            'maxRosterSize': 99
-        }
-    cfg = dict(scoring_settings)
+        try:
+            with open('scoring_settings.json', 'r') as f:
+                settings_file = json.load(f)
+                for k, v in settings_file.items():
+                    if isinstance(v, dict) and 'value' in v:
+                        cfg[k] = v['value']
+                    else:
+                        cfg[k] = v
+        except Exception:
+            pass
+    else:
+        cfg = dict(scoring_settings)
+
     cfg.setdefault('scoringPoints', DEFAULT_NCAA_D2_SCORING)
     cfg.setdefault('relayMultiplier', 2)
     cfg.setdefault('halfRateRelaySwimmer', True)
     cfg.setdefault('maxIndividualScorersPerTeam', 999)
-    # Enforce the hard cap of 2 relays for A/B finals, regardless of external settings that might try to raise it.
-    cfg['maxRelaysScoringPerTeam'] = min(int(cfg.get('maxRelaysScoringPerTeam', 999)), 2)
+    # Enforce the hard cap of relays
+    cfg['maxRelaysScoringPerTeam'] = min(int(cfg.get('maxRelaysScoringPerTeam', 2)), 2)
     cfg.setdefault('maxRosterSize', 99)
+    cfg.setdefault('unscoredRounds', ['C FINAL'])
+    cfg.setdefault('exhibitionMarkers', ['x', 'X'])
+    cfg.setdefault('timeTrialMarkers', ['TIME TRIAL', 'TT'])
     return cfg
-
 
 def allowed_rounds_for_conference(conf):
     """Return a set of round name fragments that are considered scoring for the conference."""
-    # NSISC: All championship finals (A, B, and C) are generally unscored in NSISC. This logic handles the exclusion.
-    if conf and str(conf).upper() == 'NSISC':
-        return set() # Empty set ensures no rounds are scored by default for NSISC
-    # Default: explicit finals A/B/C and championship final only.
-    return set(['A FINAL', 'B FINAL', 'C FINAL', 'CHAMPIONSHIP FINAL', 'FINALS'])
+    return set(['A FINAL', 'B FINAL', 'CHAMPIONSHIP FINAL', 'FINALS'])
 
 def time_to_sec(t):
     if not t or t == 'NT': return 9999.99
-    # Clean non-numeric/colons characters and remove period trailing noise
     val = re.sub(r'[^\d\.:]', '', t).rstrip('.') 
     if not val: return 9999.99
     
     if ':' in val:
         parts = val.split(':')
-        # Handle potential for single-digit minutes (e.g., '1:5')
         try:
             minutes = float(parts[0])
             seconds = float(parts[1]) if len(parts) > 1 else 0.0
@@ -59,8 +60,6 @@ def time_to_sec(t):
         return 9999.99
 
 def get_sort_key(a):
-    """Helper function to generate sort keys: Rank (primary), Time (secondary). Returns a tuple for sorting."""
-    # 1. Extract numerical rank if present (most reliable scoring indicator)
     rank = a.get('rank')
     rnum = None
     if rank:
@@ -68,7 +67,6 @@ def get_sort_key(a):
         m = re.search(r"(\d+)", s)
         rnum = int(m.group(1)) if m else None
 
-    # 2. Determine the primary time for sorting (Finals > Prelims > other)
     t_final = a.get('finals_time') or a.get('prelims_time')
     t_pre = a.get('prelims_time')
     t = None
@@ -77,42 +75,18 @@ def get_sort_key(a):
     elif t_pre:
         t = time_to_sec(t_pre)
 
-    # 3. Determine sort tuple based on priority (Rank, Time, Exclusion/Exhibition Flag)
-    
     is_exh = a.get('is_exhibition', False)
     is_tt = a.get('is_time_trial', False)
     
     if is_exh or is_tt:
-        # Exhibitions and time-trials go last (highest rank, max time)
-        return (99999, 99999 + t, 1)
+        return (99999, 99999 + (t or 0), 1)
 
-    # If we have a clear rank, use it as the primary sort key.
     if rnum is not None:
-        # Use rank and performance time for stable sorting in scored events.
-        return (rnum, t, 0)
+        return (rnum, (t or 0), 0)
     
-    # Otherwise, rely purely on the best available time for general chronological ordering.
-    return (10000 + 1, t, 0)
+    return (10000 + 1, (t or 0), 0)
 
 def calculate_points(athletes, scoring_settings=None):
-    """
-    Calculates points for all athletes based on rank, round, and event type (individual/relay).
-    Handles exclusions: NSISC C finals, exhibition swims, time trials, etc.
-    Enriches athlete data with performance details required for front-end visualization 
-    (podium status, cutlines, times) and returns a comprehensive dictionary containing scores, totals, 
-    and detailed performer data for frontend consumption.
-    """
-    # 1. Group athletes by Event and Gender, which is a consistent scoring unit.
-    events = {}
-    for ath in athletes:
-        # Key: (Event Name, Gender)
-        key = (ath['event'], ath['gender'])
-        if key not in events:
-            events[key] = []
-        events[key].append(ath)
-        
-    all_calculated_athletes = {}
-
     cfg = _resolve_scoring_settings(scoring_settings)
     SCORING = cfg['scoringPoints']
     relay_multiplier = cfg['relayMultiplier']
@@ -120,102 +94,89 @@ def calculate_points(athletes, scoring_settings=None):
     max_relays_cfg = cfg['maxRelaysScoringPerTeam'] 
     max_individuals_cfg = cfg['maxIndividualScorersPerTeam']
 
-    # --- Start Event Processing Loop ---
-    event_results = []
+    # Enrich athletes with exhibition and time trial markers from settings
+    for ath in athletes:
+        ev_name = str(ath.get('event', '')).upper()
+        rank_str = str(ath.get('rank', ''))
+        t_final = str(ath.get('finals_time', ''))
+        t_pre = str(ath.get('prelims_time', ''))
+
+        ath['is_exhibition'] = False
+        ath['is_time_trial'] = False
+
+        for marker in cfg.get('exhibitionMarkers', ['x', 'X']):
+            if marker in rank_str or marker in t_final or marker in t_pre:
+                ath['is_exhibition'] = True
+                
+        for marker in cfg.get('timeTrialMarkers', ['TIME TRIAL', 'TT']):
+            if marker in ev_name:
+                ath['is_time_trial'] = True
+
+    events = {}
+    for ath in athletes:
+        key = (ath['event'], ath['gender'])
+        if key not in events:
+            events[key] = []
+        events[key].append(ath)
+        
+    scored_athletes = []
 
     for (event, gender), ev_athletes in events.items():
         is_relay = any(a.get('is_relay') for a in ev_athletes)
         
-        # 2. Define sorting logic
-        event_data = {
-            'event': event, 
-            'gender': gender, 
-            'is_relay': is_relay, 
-            'athletes_details': [], # List of all athletes for detailed display/hover table
-            'team_scores': defaultdict(float) # Scores calculated for the teams in this specific event
-        }
-
-        # Populate initial athlete details list (used for hover table data)
         for a in ev_athletes:
-            # Add standard performance metadata required by frontend visualization
             a['podium'] = 'gold' if str(a.get('rank')) == '1' else \
                           'silver' if str(a.get('rank')) == '2' else \
                           'bronze' if str(a.get('rank')) == '3' else None
-            # Assuming a flag or method exists to check cutlines and pre-qualifying status
             a['cutline_achieved'] = a.get('is_cutline', False) 
-            
-            event_data['athletes_details'].append({
-                'athlete': a, 
-                'calculated_points': None # Will be updated later
-            })
-
+            a['calculated_points'] = "N/A"
 
         if is_relay:
-            # --- RELAY POINT CALCULATION ---
-            
             teams = defaultdict(list)
             for a in ev_athletes:
-                # Use rank and primary time as the key for grouping identical results
-                t_key = (a['team'], a.get('rank'), a.get('finals_time') or a.get('prelims_time'))
+                t_key = (a.get('team'), a.get('rank'), a.get('finals_time') or a.get('prelims_time'))
                 teams[t_key].append(a)
                 
-            # Sort keys to process scoring in ranked order using the new key function
-            sorted_keys = sorted(list(teams.keys()), key=lambda k: get_sort_key(k[1][0]))
-            all_calculated_athletes = {} # Tracks all athletes with assigned points for this event
+            sorted_keys = sorted(list(teams.keys()), key=lambda k: get_sort_key(teams[k][0]))
 
             scored_count = 0
-            max_relays = max_relays_cfg
             team_scoring_metrics = defaultdict(lambda: {'relays': 0})
             
             for (team, rank, time) in sorted_keys:
-                # Get all swimmers belonging to this ranked team/time group
                 group = teams[(team, rank, time)] 
-                
                 grp_len = len(group)
                 start = scored_count
-                end = min(scored_count + grp_len, len(SCORING))
+                end = min(scored_count + 1, len(SCORING)) # Relay takes 1 place in scoring list
                 pts_slice = SCORING[start:end]
                 
                 if pts_slice:
-                    avg_point = sum(pts_slice) / len(pts_slice)
+                    team_pts_val = pts_slice[0] * relay_multiplier
                 else:
-                    avg_point = 0
-                team_pts_val = avg_point * relay_multiplier
+                    team_pts_val = 0
                 
-                # Check for scoring eligibility based on complex rules (NSISC C finals, X swims, TTs)
                 team_athlete = group[0] 
                 is_exhibition = team_athlete.get('is_exhibition', False)
-                is_time_trial = team_athlete.get('is_time_trial', False) or 'TIME TRIAL' in team_athlete.get('event', '').upper()
+                is_time_trial = team_athlete.get('is_time_trial', False)
 
                 conf = team_athlete.get('conference')
                 allowed = allowed_rounds_for_conference(conf)
-                round_swam_up = team_athlete.get('round_swam', '').upper()
-                ev_name = team_athlete.get('event','').upper()
+                round_swam_up = str(team_athlete.get('round_swam', '')).upper()
+                ev_name = str(team_athlete.get('event','')).upper()
                 is_distance = bool(re.search(r'\b(\d{3,})\b', ev_name)) or 'TIMED' in ev_name 
 
-                # NSISC C Finals exclusion check: A round is unscored if (Conference is NSISC AND Round/Event contains 'C FINAL').
-                is_c_finals_unscored = ('NSISC' in conf and ('C FINAL' in ev_name or 'C FINAL' in round_swam_up))
+                unscored_rounds = cfg.get('unscoredRounds', [])
+                is_unscored_round = any(ur.upper() in ev_name or ur.upper() in round_swam_up for ur in unscored_rounds)
 
-                # Scoring logic check: Must be allowed by conference (based on provided rules) AND must not be time-trial/exhibition.
-                is_scoring_round = any(r in round_swam_up for r in allowed) or \
-                                   (is_distance and 'PRELIM' in round_swam_up and not is_c_finals_unscored)
+                is_scoring_round = (any(r in round_swam_up for r in allowed) and not is_unscored_round) or \
+                                   (is_distance and 'PRELIM' in round_swam_up and not is_unscored_round)
 
-                # Final check: Must pass all checks.
                 can_score = is_scoring_round and not is_exhibition and not is_time_trial
 
-
                 if can_score and scored_count < len(SCORING):
-                    
-                    team_name = group[0].get('team')
+                    team_name = team_athlete.get('team')
                     current_relays = team_scoring_metrics[team_name]['relays']
                     
-                    # Check relay cap 
-                    if current_relays >= max_relays:
-                        for a in group:
-                            a['calculated_points'] = "N/A"
-                            all_calculated_athletes[f"{event}_{gender}_{a['name']}"] = a
-                    else:
-                        # Calculate per-swimmer points and update tracking metrics
+                    if current_relays < max_relays_cfg:
                         team_scoring_metrics[team_name]['relays'] += 1
                         num_swimmers = grp_len 
                         
@@ -227,23 +188,16 @@ def calculate_points(athletes, scoring_settings=None):
                         
                         for a in group:
                             a['calculated_points'] = swimmer_pts
-                            all_calculated_athletes[f"{event}_{gender}_{a['name']}"] = a
-                    scored_count += grp_len
-                else:
-                    # Scoring was disallowed or cap was reached/violated
-                    for a in group:
-                        a['calculated_points'] = "N/A"
-                        all_calculated_athletes[f"{event}_{gender}_{a['name']}"] = a
+                        scored_count += 1
+                
+                scored_athletes.extend(group)
 
         else:
-            # --- INDIVIDUAL POINT CALCULATION ---
             ev_athletes.sort(key=get_sort_key)
             scored_count = 0
-            max_individuals = max_individuals_cfg
             
             i = 0
             while i < len(ev_athletes):
-                # Build tie group based on rank and time
                 group = [ev_athletes[i]]
                 def indiv_key(a):
                     return (a.get('rank'), a.get('finals_time') or a.get('prelims_time'))
@@ -253,71 +207,45 @@ def calculate_points(athletes, scoring_settings=None):
                     group.append(ev_athletes[j])
                     j += 1
                 
-                # The group is now correctly sized for the current rank/time block
-                i = j # Move i to the start of the next unique score group
+                i = j 
 
-                # --- Scoring Logic Check (Individual) ---
                 team_athlete = group[0] 
                 is_exhibition = team_athlete.get('is_exhibition', False)
-                is_time_trial = team_athlete.get('is_time_trial', False) or 'TIME TRIAL' in team_athlete.get('event', '').upper()
+                is_time_trial = team_athlete.get('is_time_trial', False)
 
                 conf = team_athlete.get('conference')
                 allowed = allowed_rounds_for_conference(conf)
-                round_swam_up = team_athlete.get('round_swam', '').upper()
-                ev_name = team_athlete.get('event','').upper()
+                round_swam_up = str(team_athlete.get('round_swam', '')).upper()
+                ev_name = str(team_athlete.get('event','')).upper()
                 is_distance = bool(re.search(r'\b(\d{3,})\b', ev_name)) or 'TIMED' in ev_name 
 
-                # NSISC C Finals exclusion check: Must be scored ONLY IF (Not NSISC OR not C Final)
-                is_c_finals_unscored = ('NSISC' in conf and 'C FINAL' in ev_name) or \
-                                    ('NSISC' in conf and 'C FINAL' in round_swam_up)
+                unscored_rounds = cfg.get('unscoredRounds', [])
+                is_unscored_round = any(ur.upper() in ev_name or ur.upper() in round_swam_up for ur in unscored_rounds)
 
-                # Scoring logic check: Must be allowed by conference AND must not be time-trial/exhibition.
-                is_scoring_round = any(r in round_swam_up for r in allowed) or \
-                                   (is_distance and 'PRELIM' in round_swam_up and not is_c_finals_unscored)
+                is_scoring_round = (any(r in round_swam_up for r in allowed) and not is_unscored_round) or \
+                                   (is_distance and 'PRELIM' in round_swam_up and not is_unscored_round)
 
-                # Final check: Must pass all checks.
                 can_score = is_scoring_round and not is_exhibition and not is_time_trial
+                grp_len = len(group)
 
                 if can_score and scored_count < len(SCORING):
-                    
-                    team_name = group[0].get('team') # For individual events, team name might be null/same as athlete's identifier
-                    current_relays = 0 # N/A for individual
-                    
-                    # Calculate points based on group size and scoring pool.
                     start = scored_count
                     end = min(scored_count + grp_len, len(SCORING))
                     pts_slice = SCORING[start:end]
                     
                     if pts_slice:
-                        # Individual event points are assigned to each athlete in the group based on their rank/order.
                         for index, pts in enumerate(pts_slice):
                             for athlete in group:
-                                athlete['calculated_points'] = pts # Assign specific point value
-                        group[-1]['calculated_points'] = sum(pts_slice) # Only assign total score to the last swimmer for simple tracking if needed
-                    else:
-                        # No points scored, set N/A
-                        for a in group:
-                            a['calculated_points'] = "N/A"
-
-
-                    # Update internal scoring structures (if necessary, though individual scores are usually handled by total aggregation)
-                    event_data['team_scores'][team_name] += sum(pts_slice) if pts_slice else 0.0
+                                athlete['calculated_points'] = pts 
+                        # Average tie points if multiple tie for same spot but pool is smaller? 
+                        # Actually standard ties split points:
+                        if grp_len > 1 and len(pts_slice) > 0:
+                            avg_pts = sum(pts_slice) / grp_len
+                            for athlete in group:
+                                athlete['calculated_points'] = avg_pts
+                    
                     scored_count += grp_len
 
-                else:
-                    # Scoring was disallowed or failed checks. Set points to N/A.
-                    for a in group:
-                        a['calculated_points'] = "N/A"
+                scored_athletes.extend(group)
 
-
-                i = j + 1 # Increment i for the next iteration block
-                
-            
-    # 3. Final Assembly and Return
-    return {
-        'event': event, 
-        'gender': gender, 
-        'is_relay': is_relay, 
-        'athletes_details': [a for a in ev_athletes], # Use the full list of enriched athletes
-        'team_scores': dict(event_data['team_scores']) # Return as standard dictionary
-    }
+    return scored_athletes
